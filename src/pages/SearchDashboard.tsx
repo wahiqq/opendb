@@ -16,10 +16,22 @@ interface Company {
 
 interface Contact {
   id: string
-  ContactId: string
-  'Email Name': string
+  ContactID: string
+  Name: string
+  Email: string
   'Phone Number': string
+  Position?: string
   Tags: string
+  CompanyID?: string
+  Company?: {
+    id: string
+    CompanyID: string
+    'Company Name': string
+    Country: string
+    State: string
+    CreatedBy: string
+    Notes: string
+  }
 }
 
 interface SearchResults {
@@ -96,19 +108,19 @@ export default function SearchDashboard() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by company name, email, or contact ID..."
+                placeholder="Search by company name, contact name, or contact email..."
                 style={{
                   width: '100%',
                   padding: '12px 16px 12px 40px',
                   fontSize: '15px',
-                  border: '1px solid var(--border-strong)',
+                  border: '2px solid var(--gray-300)',
                   borderRadius: '10px',
                   outline: 'none',
                   background: 'var(--surface)',
                   color: 'var(--text)',
                 }}
-                onFocus={(e) => e.target.style.borderColor = 'var(--green-600)'}
-                onBlur={(e) => e.target.style.borderColor = 'var(--border-strong)'}
+                onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
               />
               <IconSearch style={{
                 position: 'absolute',
@@ -146,7 +158,32 @@ export default function SearchDashboard() {
           </div>
         )}
 
-        {results && (
+        {loading && (
+          <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="card" style={{ marginBottom: '1rem', opacity: 1 }}>
+                <div style={{
+                  height: '20px',
+                  width: `${55 + i * 10}%`,
+                  background: 'var(--gray-200)',
+                  borderRadius: '6px',
+                  marginBottom: '12px',
+                  animation: 'skeleton-pulse 1.4s ease-in-out infinite',
+                }} />
+                <div style={{
+                  height: '14px',
+                  width: '40%',
+                  background: 'var(--gray-200)',
+                  borderRadius: '6px',
+                  animation: 'skeleton-pulse 1.4s ease-in-out infinite',
+                  animationDelay: '0.2s',
+                }} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!loading && results && (
           <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
             {/* Companies Section */}
             {results.companies.length > 0 && (
@@ -206,58 +243,147 @@ export default function SearchDashboard() {
               </div>
             )}
 
-            {/* Contacts Section */}
+            {/* Contacts Section - Grouped by Company */}
             {results.contacts.length > 0 && (
               <div>
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', fontSize: '1.1rem', fontWeight: 800, color: 'var(--text)' }}>
-                  <IconDatabase style={{ width: '20px', height: '20px', color: 'var(--green-600)' }} />
+                  <IconDatabase style={{ width: '20px', height: '20px', color: 'var(--primary)' }} />
                   Contacts ({results.contacts.length})
                 </h2>
-                <div style={{ display: 'grid', gap: '1rem' }}>
-                  {results.contacts.map((contact) => (
-                    <div
-                      key={contact.id}
-                      className="card"
-                      style={{ marginBottom: 0 }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>
-                          {contact['Email Name'] || 'No email'}
-                        </h3>
-                        <span style={{
-                          padding: '4px 12px',
-                          background: 'var(--green-100)',
-                          color: 'var(--green-700)',
-                          borderRadius: '12px',
-                          fontSize: '13px',
-                          fontWeight: 700,
-                          border: '1px solid var(--green-200)',
-                        }}>
-                          {contact.ContactId}
-                        </span>
+                
+                {/* Group contacts by company */}
+                {Array.from(
+                  results.contacts.reduce((acc, contact) => {
+                    const companyId = contact.Company?.id || 'no-company'
+                    if (!acc.has(companyId)) {
+                      acc.set(companyId, {
+                        company: contact.Company,
+                        contacts: [],
+                      })
+                    }
+                    acc.get(companyId)!.contacts.push(contact)
+                    return acc
+                  }, new Map())
+                ).map(([companyId, group]) => (
+                  <div key={companyId} style={{ marginBottom: '2rem' }}>
+                    {/* Company Header */}
+                    {group.company ? (
+                      <div
+                        className="card"
+                        style={{
+                          marginBottom: '1rem',
+                          background: 'var(--primary-bg)',
+                          borderLeft: '4px solid var(--primary)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--primary)' }}>
+                            {group.company['Company Name']}
+                          </h3>
+                          <span style={{
+                            padding: '4px 12px',
+                            background: 'var(--primary)',
+                            color: 'var(--text-on-primary)',
+                            borderRadius: '12px',
+                            fontSize: '13px',
+                            fontWeight: 700,
+                          }}>
+                            {group.company.CompanyID}
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                          {group.company.Country && (
+                            <div>
+                              <strong style={{ color: 'var(--text)' }}>Country:</strong> {group.company.Country}
+                            </div>
+                          )}
+                          {group.company.State && (
+                            <div>
+                              <strong style={{ color: 'var(--text)' }}>State:</strong> {group.company.State}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', fontSize: '14px', color: 'var(--text-muted)' }}>
-                        {contact['Phone Number'] && (
-                          <div>
-                            <strong style={{ color: 'var(--text)' }}>Phone:</strong> {contact['Phone Number']}
-                          </div>
-                        )}
-                        {contact.Tags && (
-                          <div>
-                            <strong style={{ color: 'var(--text)' }}>Tags:</strong> <span style={{
-                              padding: '2px 8px',
-                              background: 'var(--green-100)',
-                              color: 'var(--green-700)',
-                              borderRadius: '4px',
-                              fontSize: '13px',
+                    ) : (
+                      <div style={{
+                        padding: '12px',
+                        background: 'var(--error-bg)',
+                        border: '1px solid var(--error-border)',
+                        borderRadius: '8px',
+                        marginBottom: '1rem',
+                        color: 'var(--error-text)',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                      }}>
+                        ⚠ Contact not linked to any company
+                      </div>
+                    )}
+
+                    {/* Contacts under this company */}
+                    <div style={{ display: 'grid', gap: '0.75rem' }}>
+                      {group.contacts.map((contact) => (
+                        <div
+                          key={contact.id}
+                          className="card"
+                          style={{
+                            marginBottom: 0,
+                            padding: '14px 16px',
+                            borderLeft: '3px solid var(--primary-light)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '10px' }}>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: 700, color: 'var(--text)' }}>
+                                {contact.Name || 'No name'}
+                              </h4>
+                              {contact.Position && (
+                                <p style={{ margin: '0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                  {contact.Position}
+                                </p>
+                              )}
+                            </div>
+                            <span style={{
+                              padding: '3px 10px',
+                              background: 'var(--gray-100)',
+                              color: 'var(--text-secondary)',
+                              borderRadius: '6px',
+                              fontSize: '12px',
                               fontWeight: 600,
-                            }}>{contact.Tags}</span>
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {contact.ContactID}
+                            </span>
                           </div>
-                        )}
-                      </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '13px', color: 'var(--text-muted)' }}>
+                            {contact.Email && (
+                              <div>
+                                <strong style={{ color: 'var(--text)' }}>Email:</strong> {contact.Email}
+                              </div>
+                            )}
+                            {contact['Phone Number'] && (
+                              <div>
+                                <strong style={{ color: 'var(--text)' }}>Phone:</strong> {contact['Phone Number']}
+                              </div>
+                            )}
+                            {contact.Tags && (
+                              <div>
+                                <strong style={{ color: 'var(--text)' }}>Tags:</strong> <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  background: 'var(--primary-bg)',
+                                  color: 'var(--primary)',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  fontWeight: 600,
+                                }}>{contact.Tags}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             )}
 
