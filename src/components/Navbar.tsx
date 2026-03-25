@@ -3,6 +3,7 @@ import {
   IconHome,
   IconToolbox,
   IconLayers,
+  IconLogout,
 } from './Icons'
 
 const navLinks = [
@@ -15,14 +16,15 @@ export default function Navbar() {
   const navigate = useNavigate()
 
   return (
-    <nav className="navbar">
+    <nav className="navbar" role="navigation" aria-label="Main navigation">
       <button
         className="navbar-brand"
         onClick={() => navigate('/dashboard')}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', height: '100%', padding: 0 }}
+        aria-label="RISE Research - Home"
+        title="Go to dashboard"
       >
         <div className="navbar-brand-icon">
-          <IconLayers style={{ width: 18, height: 18 }} />
+          <img src="/logo.png" alt="RISE Research" width={40} height={40} />
         </div>
         <span className="navbar-brand-text">
           RISE <span>Research</span>
@@ -37,12 +39,25 @@ export default function Navbar() {
               key={to}
               className={`navbar-link${active ? ' active' : ''}`}
               onClick={() => navigate(to)}
+              aria-current={active ? 'page' : undefined}
+              title={label}
             >
-              <Icon />
-              {label}
+              <Icon aria-hidden="true" />
+              <span>{label}</span>
             </button>
           )
         })}
+        <button
+          className="navbar-link"
+          onClick={() => {
+            localStorage.removeItem('riseUser')
+            navigate('/')
+          }}
+          title="Sign out"
+        >
+          <IconLogout aria-hidden="true" />
+          <span>Logout</span>
+        </button>
       </div>
     </nav>
   )

@@ -15,25 +15,39 @@ export default function Layout({ title, description, children }: LayoutProps) {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
 
-      <div className="page-header">
+      <header className="page-header" role="banner">
         <div className="page-header-inner">
-          <div className="breadcrumb">
-            <a onClick={() => navigate('/')}>Home</a>
-            <span className="breadcrumb-sep">
+          <nav className="breadcrumb" aria-label="Breadcrumb">
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                color: 'rgba(255,255,255,0.85)',
+              }}
+            >
+              Home
+            </button>
+            <span className="breadcrumb-sep" aria-hidden="true">
               <IconChevronRight />
             </span>
             <span style={{ color: 'rgba(255,255,255,0.8)' }}>{title}</span>
-          </div>
+          </nav>
           <h1>{title}</h1>
           <p className="page-header-desc">{description}</p>
         </div>
-      </div>
+      </header>
 
-      <div className="page-body" style={{ flex: 1 }}>
+      <main className="page-body" role="main">
         {children}
-      </div>
+      </main>
 
-      <footer className="site-footer">© 2026 RISE Research — Internal Tools</footer>
+      <footer className="site-footer" role="contentinfo">
+        © 2026 RISE Research — Internal Tools
+      </footer>
     </div>
   )
 }
