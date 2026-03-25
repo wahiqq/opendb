@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n api,web -c magenta,cyan \"uvicorn api.index:app --port 8000 --reload\" \"vite\"",
+    "dev": "concurrently -n api,web -c magenta,cyan \".venv\\Scripts\\python.exe -m uvicorn api.index:app --port 8000 --reload\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
