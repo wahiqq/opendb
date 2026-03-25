@@ -1,7 +1,7 @@
+import csv
 import io
 import os
-import pandas as pd
-from typing import List, Optional, Union
+from typing import List, Optional, Dict
 from fastapi import FastAPI, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -25,9 +25,9 @@ CONTACTS_DATABASE_BASE_ID = os.getenv("CONTACTS_DATABASE_BASE_ID", "appNF0vZQGLN
 TEAM_TABLE_ID = "tbltkz5mwNDjR3a6w"
 
 
-def _check_columns(filename: str, df: pd.DataFrame, required: List[str]) -> Optional[str]:
+def _check_columns(filename: str, headers: List[str], required: List[str]) -> Optional[str]:
     """Return a human-readable error if any required columns are missing."""
-    found = [str(c).strip().lower() for c in df.columns]
+    found = [c.strip().lower() for c in headers]
     missing = [c for c in required if c not in found]
     if not missing:
         return None
@@ -39,32 +39,11 @@ def _check_columns(filename: str, df: pd.DataFrame, required: List[str]) -> Opti
     )
 
 
-async def parse_upload(file: UploadFile) -> pd.DataFrame:
-    """Read an uploaded CSV or XLSX file into a DataFrame."""
-    content = await file.read()
-    if not content:
-        raise ValueError(f"'{file.filename}' is empty.")
-    ext = os.path.splitext(file.filename or "")[1].lower()
-    try:
-        if ext in (".xlsx", ".xls"):
-            df = pd.read_excel(io.BytesIO(content))
-        else:
-            df = _read_csv_smart(content)
-        if df.empty:
-            raise ValueError(f"'{file.filename}' contains no data rows.")
-        # Replace NaN with empty string so JSON never contains bare `NaN`
-        return df.where(df.notna(), other="")
-    except ValueError:
-        raise
-    except Exception as e:
-        raise ValueError(f"Could not read '{file.filename}': {e}")
-
-
-def _read_csv_smart(content: bytes) -> pd.DataFrame:
+def _parse_csv_bytes(content: bytes, filename: str) -> List[Dict[str, str]]:
     """
-    Parse a CSV that may have metadata/title rows before the real header
-    (e.g. Google Ads, Search Console exports). Tries multiple encodings and
-    auto-detects the first row that looks like a proper header.
+    Parse CSV bytes into a list of dicts. Tries multiple encodings and
+    auto-detects delimiter + skips metadata rows before the real header
+    (e.g. Google Ads, Search Console exports).
     """
     for encoding in ("utf-8-sig", "utf-8", "latin-1"):
         try:
@@ -72,47 +51,79 @@ def _read_csv_smart(content: bytes) -> pd.DataFrame:
         except UnicodeDecodeError:
             continue
 
-        lines = text.splitlines()
+        lines = [l for l in text.splitlines() if l.strip()]
         if not lines:
-            raise ValueError("File is empty.")
+            raise ValueError(f"'{filename}' is empty.")
 
-        # Detect delimiter by examining the first 20 lines
-        # Pick the delimiter that produces the most consistent column count
-        best_skiprows = 0
+        # Find best delimiter and header row by max consistent column count
+        best_skip = 0
         best_sep = ","
         best_ncols = 0
 
         for sep in (",", "\t", ";"):
-            col_counts = [len(line.split(sep)) for line in lines[:20] if line.strip()]
-            if not col_counts:
-                continue
+            col_counts = [len(line.split(sep)) for line in lines[:20]]
             max_cols = max(col_counts)
             if max_cols <= best_ncols:
                 continue
-            # Find the first row that has that max column count — that's the header
             for i, line in enumerate(lines[:20]):
                 if len(line.split(sep)) == max_cols:
-                    best_skiprows = i
+                    best_skip = i
                     best_sep = sep
                     best_ncols = max_cols
                     break
 
         if best_ncols == 0:
-            raise ValueError("Could not detect columns in file.")
+            raise ValueError(f"Could not detect columns in '{filename}'.")
 
         try:
-            df = pd.read_csv(
-                io.BytesIO(content),
-                sep=best_sep,
-                skiprows=best_skiprows,
-                encoding=encoding,
-            )
-            if len(df.columns) > 0:
-                return df
+            relevant = "\n".join(lines[best_skip:])
+            reader = csv.DictReader(io.StringIO(relevant), delimiter=best_sep)
+            rows = [row for row in reader]
+            if rows:
+                return rows
         except Exception:
             continue
 
-    raise ValueError("Could not parse the CSV file. Please check the format.")
+    raise ValueError(f"Could not parse '{filename}'. Please check the format.")
+
+
+async def _parse_upload(file: UploadFile) -> List[Dict[str, str]]:
+    """Read an uploaded CSV or XLSX file into a list of dicts with lowercased keys."""
+    content = await file.read()
+    if not content:
+        raise ValueError(f"'{file.filename}' is empty.")
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+
+    if ext in (".xlsx", ".xls"):
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            ws = wb.active
+            row_iter = iter(ws.rows)
+            headers = [str(cell.value or "").strip() for cell in next(row_iter)]
+            rows = []
+            for row in row_iter:
+                values = [str(cell.value) if cell.value is not None else "" for cell in row]
+                rows.append(dict(zip(headers, values)))
+            wb.close()
+            if not rows:
+                raise ValueError(f"'{file.filename}' contains no data rows.")
+            return rows
+        except ValueError:
+            raise
+        except Exception as e:
+            raise ValueError(f"Could not read '{file.filename}': {e}")
+
+    rows = _parse_csv_bytes(content, file.filename or "file.csv")
+    if not rows:
+        raise ValueError(f"'{file.filename}' contains no data rows.")
+    return rows
+
+
+def _norm_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Lowercase all keys and strip whitespace from values."""
+    return [{k.strip().lower(): (v or "").strip() for k, v in row.items()} for row in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +138,8 @@ async def upload_csv(files: List[UploadFile] = File(...)):
     Returns a JSON list — frontend generates the download.
     """
     allowed = {".csv", ".xlsx", ".xls"}
-    grouped: Optional[pd.DataFrame] = None
+    # email -> [total_opens, presence_count]
+    aggregated: Dict[str, List[float]] = {}
 
     for file in files:
         ext = os.path.splitext(file.filename or "")[1].lower()
@@ -138,46 +150,38 @@ async def upload_csv(files: List[UploadFile] = File(...)):
             )
 
         try:
-            df = await parse_upload(file)
+            rows = await _parse_upload(file)
         except ValueError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
 
-        df.columns = [str(c).strip().lower() for c in df.columns]
-        col_err = _check_columns(file.filename or "", df, ["email", "opens"])
+        rows = _norm_rows(rows)
+        col_err = _check_columns(file.filename or "", list(rows[0].keys()) if rows else [], ["email", "opens"])
         if col_err:
             return JSONResponse({"error": col_err}, status_code=400)
 
-        df = df[["email", "opens"]].copy()
-        df.columns = ["email", "open"]
-        df["open"] = pd.to_numeric(df["open"], errors="coerce").fillna(0)
-        df["email"] = df["email"].astype(str).str.strip().str.lower()
-        df = df[df["email"].str.len() > 0]
+        # Sum opens per email within this file
+        per_file: Dict[str, float] = {}
+        for row in rows:
+            email = row.get("email", "").strip().lower()
+            if not email:
+                continue
+            try:
+                opens = float(row.get("opens", 0) or 0)
+            except (ValueError, TypeError):
+                opens = 0.0
+            per_file[email] = per_file.get(email, 0.0) + opens
 
-        per_file = df.groupby("email", as_index=False).agg(total_open=("open", "sum"))
-        per_file["presence"] = 1
+        # Merge into aggregated
+        for email, opens in per_file.items():
+            if email not in aggregated:
+                aggregated[email] = [0.0, 0]
+            aggregated[email][0] += opens
+            aggregated[email][1] += 1
 
-        if grouped is None:
-            grouped = per_file
-        else:
-            grouped = grouped.merge(per_file, on="email", how="outer", suffixes=("", "_r"))
-            grouped["total_open"] = (
-                grouped["total_open"].fillna(0) + grouped["total_open_r"].fillna(0)
-            )
-            grouped["presence"] = (
-                grouped["presence"].fillna(0) + grouped["presence_r"].fillna(0)
-            )
-            grouped = grouped.drop(
-                columns=[c for c in ["total_open_r", "presence_r"] if c in grouped.columns]
-            )
-
-    if grouped is None:
-        return JSONResponse({"deleted_count": 0, "emails": []})
-
-    grouped["total_open"] = pd.to_numeric(grouped["total_open"], errors="coerce").fillna(0)
-    grouped["presence"] = pd.to_numeric(grouped["presence"], errors="coerce").fillna(0)
-
-    mask = (grouped["presence"] >= 3) & (grouped["total_open"] == 0)
-    emails = grouped.loc[mask, "email"].tolist()
+    emails = [
+        email for email, (total_opens, presence) in aggregated.items()
+        if presence >= 3 and total_opens == 0
+    ]
 
     return JSONResponse({"deleted_count": len(emails), "emails": emails})
 
@@ -196,7 +200,7 @@ async def duplicate_email_finder(
     Returns rows as JSON — frontend generates the download.
     """
     allowed = {".csv", ".xlsx", ".xls"}
-    all_dfs: List[pd.DataFrame] = []
+    all_rows: List[Dict[str, str]] = []
 
     for file in files:
         ext = os.path.splitext(file.filename or "")[1].lower()
@@ -207,104 +211,93 @@ async def duplicate_email_finder(
             )
 
         try:
-            df = await parse_upload(file)
+            rows = await _parse_upload(file)
         except ValueError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
 
-        df.columns = [str(c).strip().lower() for c in df.columns]
-
-        col_err = _check_columns(file.filename or "", df, ["email"])
+        rows = _norm_rows(rows)
+        col_err = _check_columns(file.filename or "", list(rows[0].keys()) if rows else [], ["email"])
         if col_err:
             return JSONResponse({"error": col_err}, status_code=400)
 
-        for col in ("first_name", "last_name", "company"):
-            if col not in df.columns:
-                df[col] = ""
-        for col in ("email", "first_name", "last_name", "company"):
-            df[col] = df[col].astype(str).str.strip()
-        df["email"] = df["email"].str.lower()
-        df = df[df["email"].str.len() > 0]
-        all_dfs.append(df)
+        for row in rows:
+            email = row.get("email", "").strip().lower()
+            if not email:
+                continue
+            all_rows.append({
+                "email": email,
+                "first_name": row.get("first_name", "").strip(),
+                "last_name": row.get("last_name", "").strip(),
+                "company": row.get("company", "").strip(),
+            })
 
-    if not all_dfs:
+    if not all_rows:
         return JSONResponse({"duplicate_count": 0, "rows": []})
 
-    combined = pd.concat(all_dfs, ignore_index=True)
-
     if duplicate_type == "email":
-        counts = combined.groupby("email").size()
-        dup_keys = counts[counts > 1].index
-        if dup_keys.empty:
-            return JSONResponse({"duplicate_count": 0, "rows": []})
+        # Group by email
+        groups: Dict[str, List[Dict]] = {}
+        for row in all_rows:
+            groups.setdefault(row["email"], []).append(row)
 
-        filtered = combined[combined["email"].isin(dup_keys)]
-
-        def agg_email(g: pd.DataFrame) -> pd.Series:
-            names = sorted(
-                {n for n in (g["first_name"] + " " + g["last_name"]).str.strip() if n}
-            )
-            companies = sorted({c for c in g["company"] if c})
-            return pd.Series({
+        rows_out = []
+        for email, group in groups.items():
+            if len(group) < 2:
+                continue
+            names = sorted({f"{r['first_name']} {r['last_name']}".strip() for r in group if (r['first_name'] or r['last_name'])})
+            companies = sorted({r["company"] for r in group if r["company"]})
+            rows_out.append({
                 "Full Name": ", ".join(names),
                 "Company Name": ", ".join(companies),
-                "Count": len(g),
-                "Emails": g.name,
+                "Count": len(group),
+                "Emails": email,
             })
-
-        out = filtered.groupby("email").apply(agg_email, include_groups=False).reset_index(drop=True)
-        rows = out[["Full Name", "Company Name", "Count", "Emails"]].to_dict(orient="records")
 
     elif duplicate_type == "company":
-        combined = combined[combined["company"].str.len() > 0]
-        counts = combined.groupby("company").size()
-        dup_keys = counts[counts > 1].index
-        if dup_keys.empty:
-            return JSONResponse({"duplicate_count": 0, "rows": []})
+        groups = {}
+        for row in all_rows:
+            if not row["company"]:
+                continue
+            groups.setdefault(row["company"], []).append(row)
 
-        filtered = combined[combined["company"].isin(dup_keys)]
-
-        def agg_company(g: pd.DataFrame) -> pd.Series:
-            names = sorted(
-                {n for n in (g["first_name"] + " " + g["last_name"]).str.strip() if n}
-            )
-            emails = sorted(set(g["email"]))
-            return pd.Series({
-                "Company Name": g.name,
+        rows_out = []
+        for company, group in groups.items():
+            if len(group) < 2:
+                continue
+            names = sorted({f"{r['first_name']} {r['last_name']}".strip() for r in group if (r['first_name'] or r['last_name'])})
+            emails = sorted({r["email"] for r in group})
+            rows_out.append({
+                "Company Name": company,
                 "Full Name(s)": ", ".join(names),
-                "Count": len(g),
+                "Count": len(group),
                 "Emails": ", ".join(emails),
             })
-
-        out = filtered.groupby("company").apply(agg_company, include_groups=False).reset_index(drop=True)
-        rows = out[["Company Name", "Full Name(s)", "Count", "Emails"]].to_dict(orient="records")
 
     elif duplicate_type == "fullname":
-        combined["fullname"] = (combined["first_name"] + " " + combined["last_name"]).str.strip()
-        combined = combined[combined["fullname"].str.len() > 0]
-        counts = combined.groupby("fullname").size()
-        dup_keys = counts[counts > 1].index
-        if dup_keys.empty:
-            return JSONResponse({"duplicate_count": 0, "rows": []})
+        groups = {}
+        for row in all_rows:
+            fullname = f"{row['first_name']} {row['last_name']}".strip()
+            if not fullname:
+                continue
+            groups.setdefault(fullname, []).append(row)
 
-        filtered = combined[combined["fullname"].isin(dup_keys)]
-
-        def agg_fullname(g: pd.DataFrame) -> pd.Series:
-            companies = sorted({c for c in g["company"] if c})
-            emails = sorted(set(g["email"]))
-            return pd.Series({
-                "Full Name": g.name,
+        rows_out = []
+        for fullname, group in groups.items():
+            if len(group) < 2:
+                continue
+            companies = sorted({r["company"] for r in group if r["company"]})
+            emails = sorted({r["email"] for r in group})
+            rows_out.append({
+                "Full Name": fullname,
                 "Company Name(s)": ", ".join(companies),
-                "Count": len(g),
+                "Count": len(group),
                 "Emails": ", ".join(emails),
             })
-
-        out = filtered.groupby("fullname").apply(agg_fullname, include_groups=False).reset_index(drop=True)
-        rows = out[["Full Name", "Company Name(s)", "Count", "Emails"]].to_dict(orient="records")
 
     else:
         return JSONResponse({"error": "Invalid duplicate_type."}, status_code=400)
 
-    return JSONResponse({"duplicate_count": len(rows), "rows": rows})
+    return JSONResponse({"duplicate_count": len(rows_out), "rows": rows_out})
 
 
 # ---------------------------------------------------------------------------
@@ -330,25 +323,20 @@ async def overlap_checker(
             )
 
     try:
-        df1 = await parse_upload(file1)
-        df2 = await parse_upload(file2)
+        rows1 = _norm_rows(await _parse_upload(file1))
+        rows2 = _norm_rows(await _parse_upload(file2))
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
-    df1.columns = [str(c).strip().lower() for c in df1.columns]
-    df2.columns = [str(c).strip().lower() for c in df2.columns]
-
-    col_err1 = _check_columns(file1.filename or "CSV 1", df1, ["email"])
+    col_err1 = _check_columns(file1.filename or "CSV 1", list(rows1[0].keys()) if rows1 else [], ["email"])
     if col_err1:
         return JSONResponse({"error": col_err1}, status_code=400)
-    col_err2 = _check_columns(file2.filename or "CSV 2", df2, ["email"])
+    col_err2 = _check_columns(file2.filename or "CSV 2", list(rows2[0].keys()) if rows2 else [], ["email"])
     if col_err2:
         return JSONResponse({"error": col_err2}, status_code=400)
 
-    emails1_series = df1["email"].astype(str).str.strip().str.lower()
-    emails2_series = df2["email"].astype(str).str.strip().str.lower()
-    emails1 = set(e for e in emails1_series if e)
-    emails2 = set(e for e in emails2_series if e)
+    emails1 = {r["email"].strip().lower() for r in rows1 if r.get("email", "").strip()}
+    emails2 = {r["email"].strip().lower() for r in rows2 if r.get("email", "").strip()}
 
     remaining = sorted(emails1 - emails2)
     overlap_count = len(emails1 & emails2)
