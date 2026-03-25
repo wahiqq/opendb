@@ -387,19 +387,28 @@ async def login(request: LoginRequest):
         async with httpx.AsyncClient() as client:
             headers = {"Authorization": f"Bearer {AIRTABLE_READ_TOKEN}"}
 
-            # Fetch all team members
+            # Fetch all team members (paginate)
             team_url = f"https://api.airtable.com/v0/{CONTACTS_DATABASE_BASE_ID}/{TEAM_TABLE_ID}"
-            response = await client.get(team_url, headers=headers)
-            data = response.json()
-
-            if response.status_code != 200:
-                return JSONResponse(
-                    {"error": f"Failed to fetch team data: {data.get('error', {}).get('message', 'Unknown error')}"},
-                    status_code=response.status_code
-                )
+            all_team_records = []
+            offset = None
+            while True:
+                params = {}
+                if offset:
+                    params["offset"] = offset
+                response = await client.get(team_url, headers=headers, params=params)
+                data = response.json()
+                if response.status_code != 200:
+                    return JSONResponse(
+                        {"error": f"Failed to fetch team data: {data.get('error', {}).get('message', 'Unknown error')}"},
+                        status_code=response.status_code
+                    )
+                all_team_records.extend(data.get("records", []))
+                offset = data.get("offset")
+                if not offset:
+                    break
 
             # Find matching user
-            for record in data.get("records", []):
+            for record in all_team_records:
                 fields = record.get("fields", {})
                 user_email = str(fields.get("Email", "")).strip().lower()
                 user_password = str(fields.get("Password", "")).strip()
@@ -444,27 +453,31 @@ async def add_lead(request: AddLeadRequest):
             headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
 
             # Step 1: Generate Company ID
-            # Fetch existing companies to determine next ID
+            # Fetch ALL existing companies (paginate) to determine next ID
             companies_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{COMPANY_TABLE_ID}"
-            companies_response = await client.get(companies_url, headers=headers)
-            companies_data = companies_response.json()
-
-            if companies_response.status_code != 200:
-                return JSONResponse(
-                    {"error": f"Failed to fetch companies: {companies_data.get('error', {}).get('message', 'Unknown error')}"},
-                    status_code=companies_response.status_code
-                )
-
-            # Generate next Company ID
             existing_ids = []
-            for record in companies_data.get("records", []):
-                company_id = record.get("fields", {}).get("CompanyID", "")
-                if company_id and company_id.startswith("COMP"):
-                    try:
-                        num = int(company_id.replace("COMP", ""))
-                        existing_ids.append(num)
-                    except ValueError:
-                        continue
+            offset = None
+            while True:
+                params = {"fields[]": "CompanyID"}
+                if offset:
+                    params["offset"] = offset
+                companies_response = await client.get(companies_url, headers=headers, params=params)
+                companies_data = companies_response.json()
+                if companies_response.status_code != 200:
+                    return JSONResponse(
+                        {"error": f"Failed to fetch companies: {companies_data.get('error', {}).get('message', 'Unknown error')}"},
+                        status_code=companies_response.status_code
+                    )
+                for record in companies_data.get("records", []):
+                    cid = record.get("fields", {}).get("CompanyID", "")
+                    if cid and cid.startswith("COMP"):
+                        try:
+                            existing_ids.append(int(cid.replace("COMP", "")))
+                        except ValueError:
+                            continue
+                offset = companies_data.get("offset")
+                if not offset:
+                    break
 
             next_id = max(existing_ids, default=0) + 1
             company_id = f"COMP{next_id:04d}"  # e.g., COMP0001, COMP0002, etc.
@@ -500,19 +513,25 @@ async def add_lead(request: AddLeadRequest):
             # Step 3: Create Contact records for each POC
             contacts_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
 
-            # Generate Contact IDs
-            contacts_fetch_response = await client.get(contacts_url, headers=headers)
-            contacts_fetch_data = contacts_fetch_response.json()
-
+            # Generate Contact IDs — paginate through all records
             existing_contact_ids = []
-            for record in contacts_fetch_data.get("records", []):
-                contact_id = record.get("fields", {}).get("ContactId", "")
-                if contact_id and contact_id.startswith("CON"):
-                    try:
-                        num = int(contact_id.replace("CON", ""))
-                        existing_contact_ids.append(num)
-                    except ValueError:
-                        continue
+            offset = None
+            while True:
+                params = {"fields[]": "ContactID"}
+                if offset:
+                    params["offset"] = offset
+                contacts_fetch_response = await client.get(contacts_url, headers=headers, params=params)
+                contacts_fetch_data = contacts_fetch_response.json()
+                for record in contacts_fetch_data.get("records", []):
+                    cid = record.get("fields", {}).get("ContactID", "")
+                    if cid and cid.startswith("CON"):
+                        try:
+                            existing_contact_ids.append(int(cid.replace("CON", "")))
+                        except ValueError:
+                            continue
+                offset = contacts_fetch_data.get("offset")
+                if not offset:
+                    break
 
             next_contact_id = max(existing_contact_ids, default=0) + 1
 
@@ -581,31 +600,49 @@ async def search_leads(q: str = Query(..., min_length=1)):
         async with httpx.AsyncClient() as client:
             headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
 
-            # Search companies
+            # Fetch all companies (paginate)
             companies_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{COMPANY_TABLE_ID}"
-            companies_response = await client.get(companies_url, headers=headers)
-            companies_data = companies_response.json()
+            all_company_records = []
+            offset = None
+            while True:
+                params = {}
+                if offset:
+                    params["offset"] = offset
+                companies_response = await client.get(companies_url, headers=headers, params=params)
+                companies_data = companies_response.json()
+                if companies_response.status_code != 200:
+                    return JSONResponse(
+                        {"error": f"Failed to fetch companies: {companies_data.get('error', {}).get('message', 'Unknown error')}"},
+                        status_code=companies_response.status_code
+                    )
+                all_company_records.extend(companies_data.get("records", []))
+                offset = companies_data.get("offset")
+                if not offset:
+                    break
 
-            # Search contacts
+            # Fetch all contacts (paginate)
             contacts_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
-            contacts_response = await client.get(contacts_url, headers=headers)
-            contacts_data = contacts_response.json()
-
-            if companies_response.status_code != 200:
-                return JSONResponse(
-                    {"error": f"Failed to fetch companies: {companies_data.get('error', {}).get('message', 'Unknown error')}"},
-                    status_code=companies_response.status_code
-                )
-
-            if contacts_response.status_code != 200:
-                return JSONResponse(
-                    {"error": f"Failed to fetch contacts: {contacts_data.get('error', {}).get('message', 'Unknown error')}"},
-                    status_code=contacts_response.status_code
-                )
+            all_contact_records = []
+            offset = None
+            while True:
+                params = {}
+                if offset:
+                    params["offset"] = offset
+                contacts_response = await client.get(contacts_url, headers=headers, params=params)
+                contacts_data = contacts_response.json()
+                if contacts_response.status_code != 200:
+                    return JSONResponse(
+                        {"error": f"Failed to fetch contacts: {contacts_data.get('error', {}).get('message', 'Unknown error')}"},
+                        status_code=contacts_response.status_code
+                    )
+                all_contact_records.extend(contacts_data.get("records", []))
+                offset = contacts_data.get("offset")
+                if not offset:
+                    break
 
             # Filter companies
             filtered_companies = []
-            for record in companies_data.get("records", []):
+            for record in all_company_records:
                 fields = record.get("fields", {})
                 company_name = str(fields.get("Company Name", "")).lower()
                 company_id = str(fields.get("CompanyID", "")).lower()
@@ -628,7 +665,7 @@ async def search_leads(q: str = Query(..., min_length=1)):
 
             # Create a company lookup map (Airtable record ID -> company details)
             company_lookup = {}
-            for record in companies_data.get("records", []):
+            for record in all_company_records:
                 fields = record.get("fields", {})
                 company_lookup[record["id"]] = {
                     "id": record["id"],
@@ -646,7 +683,7 @@ async def search_leads(q: str = Query(..., min_length=1)):
             # Filter contacts — either query matches the contact itself,
             # or the contact belongs to a matched company
             filtered_contacts = []
-            for record in contacts_data.get("records", []):
+            for record in all_contact_records:
                 fields = record.get("fields", {})
                 name = str(fields.get("Name", "")).lower()
                 email = str(fields.get("Email", "")).lower()

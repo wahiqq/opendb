@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm install:*)",
-      "Bash(python -c \"from PIL import Image, ImageDraw, ImageFont; print\\(''PIL available''\\)\")"
+      "Bash(python -c \"from PIL import Image, ImageDraw, ImageFont; print\\(''PIL available''\\)\")",
+      "Bash(.venv/Scripts/python fix_contact_ids.py)"
     ]
   }
 }
