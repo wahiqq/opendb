@@ -578,7 +578,7 @@ input[type="file"] {
 
 .dash-hero {
   background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--primary-light) 100%);
-  padding: clamp(40px, 12vw, 100px) 24px;
+  padding: clamp(24px, 4vw, 48px) 24px;
   text-align: center;
   position: relative;
   overflow: hidden;

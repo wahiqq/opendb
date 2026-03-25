@@ -640,7 +640,11 @@ async def search_leads(q: str = Query(..., min_length=1)):
                     "Notes": fields.get("Notes", ""),
                 }
 
-            # Filter contacts
+            # IDs of companies that matched the query — include all their contacts
+            matched_company_ids = {c["id"] for c in filtered_companies}
+
+            # Filter contacts — either query matches the contact itself,
+            # or the contact belongs to a matched company
             filtered_contacts = []
             for record in contacts_data.get("records", []):
                 fields = record.get("fields", {})
@@ -650,18 +654,20 @@ async def search_leads(q: str = Query(..., min_length=1)):
                 phone = str(fields.get("Phone Number", "")).lower()
                 position = str(fields.get("Position", "")).lower()
 
-                if (query in name or
+                company_ids = fields.get("CompanyID", [])
+                linked_company_id = company_ids[0] if company_ids else None
+                belongs_to_matched_company = linked_company_id in matched_company_ids
+
+                query_matches = (
+                    query in name or
                     query in email or
                     query in contact_id or
                     query in phone or
-                    query in position):
-                    # Get the company this contact belongs to
-                    company_ids = fields.get("CompanyID", [])
-                    company_data = None
-                    if company_ids and len(company_ids) > 0:
-                        company_id = company_ids[0]  # Airtable link field returns array
-                        company_data = company_lookup.get(company_id)
+                    query in position
+                )
 
+                if query_matches or belongs_to_matched_company:
+                    company_data = company_lookup.get(linked_company_id) if linked_company_id else None
                     filtered_contacts.append({
                         "id": record["id"],
                         "ContactID": fields.get("ContactID", ""),
@@ -670,8 +676,8 @@ async def search_leads(q: str = Query(..., min_length=1)):
                         "Phone Number": fields.get("Phone Number", ""),
                         "Position": fields.get("Position", ""),
                         "Tags": fields.get("Tags", ""),
-                        "CompanyID": company_ids[0] if company_ids else None,
-                        "Company": company_data,  # Include full company details
+                        "CompanyID": linked_company_id,
+                        "Company": company_data,
                     })
 
             return JSONResponse({
