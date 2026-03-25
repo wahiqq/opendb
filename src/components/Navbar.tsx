@@ -1,17 +1,13 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
-  IconTrash,
-  IconSearch,
-  IconShuffle,
   IconHome,
+  IconToolbox,
   IconLayers,
 } from './Icons'
 
 const navLinks = [
-  { to: '/', label: 'Dashboard', icon: IconHome },
-  { to: '/delete-list', label: 'Delete List', icon: IconTrash },
-  { to: '/duplicate-finder', label: 'Duplicates', icon: IconSearch },
-  { to: '/overlap-checker', label: 'Overlap', icon: IconShuffle },
+  { to: '/dashboard', label: 'Dashboard', icon: IconHome },
+  { to: '/tool-suite', label: 'Tool Suite', icon: IconToolbox },
 ] as const
 
 export default function Navbar() {
@@ -22,7 +18,7 @@ export default function Navbar() {
     <nav className="navbar">
       <button
         className="navbar-brand"
-        onClick={() => navigate('/')}
+        onClick={() => navigate('/dashboard')}
         style={{ background: 'none', border: 'none', cursor: 'pointer', height: '100%', padding: 0 }}
       >
         <div className="navbar-brand-icon">

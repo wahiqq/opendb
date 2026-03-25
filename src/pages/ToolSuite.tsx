@@ -46,7 +46,6 @@ const tools: Tool[] = [
   },
   {
     icon: IconMail,
-    accent: true,
     title: 'Gmail Lead Analyzer',
     description:
       'Advanced lead intelligence, engagement tracking, and outreach automation via the RISE platform.',
@@ -56,7 +55,7 @@ const tools: Tool[] = [
   },
 ]
 
-export default function Dashboard() {
+export default function ToolSuite() {
   const navigate = useNavigate()
 
   function open(tool: Tool) {
@@ -73,7 +72,7 @@ export default function Dashboard() {
         <div className="dash-hero-badge">
           RISE Research · Internal Tools
         </div>
-        <h1>Data Management Suite</h1>
+        <h1>Tool Suite</h1>
         <p>Clean, deduplicate, and analyze your contact lists in seconds — no code required.</p>
       </div>
 
@@ -122,4 +121,3 @@ export default function Dashboard() {
     </div>
   )
 }
-

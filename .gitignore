@@ -27,4 +27,4 @@ npm-debug.log*
 
 # Legacy / unused
 uploads/
-test_duplicates_hardcore.csv
+test_duplicates_hardcore.csv.env

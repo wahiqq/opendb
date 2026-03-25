@@ -1,14 +1,31 @@
 import io
 import os
 import pandas as pd
-from typing import List
-from fastapi import FastAPI, UploadFile, File, Form
+from typing import List, Optional, Union
+from fastapi import FastAPI, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+import httpx
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = FastAPI(title="RISE Research API")
 
+# Airtable configuration from environment variables
+AIRTABLE_WRITE_TOKEN = os.getenv("AIRTABLE_WRITE_TOKEN")
+AIRTABLE_READ_TOKEN = os.getenv("AIRTABLE_READ_TOKEN")
 
-def _check_columns(filename: str, df: pd.DataFrame, required: list[str]) -> str | None:
+LEAD_COLLECTION_BASE_ID = os.getenv("LEAD_COLLECTION_BASE_ID", "appI5BT69o10EAmY5")
+COMPANY_TABLE_ID = "tblPe818m70QqzOJX"
+CONTACTS_TABLE_ID = "tbls0ScSnuZUNe9UV"
+
+CONTACTS_DATABASE_BASE_ID = os.getenv("CONTACTS_DATABASE_BASE_ID", "appNF0vZQGLNucTck")
+TEAM_TABLE_ID = "tbltkz5mwNDjR3a6w"
+
+
+def _check_columns(filename: str, df: pd.DataFrame, required: List[str]) -> Optional[str]:
     """Return a human-readable error if any required columns are missing."""
     found = [str(c).strip().lower() for c in df.columns]
     missing = [c for c in required if c not in found]
@@ -110,7 +127,7 @@ async def upload_csv(files: List[UploadFile] = File(...)):
     Returns a JSON list — frontend generates the download.
     """
     allowed = {".csv", ".xlsx", ".xls"}
-    grouped: pd.DataFrame | None = None
+    grouped: Optional[pd.DataFrame] = None
 
     for file in files:
         ext = os.path.splitext(file.filename or "")[1].lower()
@@ -179,7 +196,7 @@ async def duplicate_email_finder(
     Returns rows as JSON — frontend generates the download.
     """
     allowed = {".csv", ".xlsx", ".xls"}
-    all_dfs: list[pd.DataFrame] = []
+    all_dfs: List[pd.DataFrame] = []
 
     for file in files:
         ext = os.path.splitext(file.filename or "")[1].lower()
@@ -343,3 +360,309 @@ async def overlap_checker(
         "remaining_count": len(remaining),
         "emails": remaining,
     })
+
+
+# ---------------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------------
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class POCData(BaseModel):
+    name: str
+    email: str
+    phoneNumber: str
+    position: str
+    tags: str
+
+class AddLeadRequest(BaseModel):
+    companyName: str
+    country: str
+    state: str
+    qualification: str
+    notes: str
+    createdBy: str
+    pocs: List[POCData]
+
+@app.post("/api/login")
+async def login(request: LoginRequest):
+    """
+    Authenticate user against the Team table in Contacts Database.
+    Returns user info on successful login.
+    """
+    email = request.email
+    password = request.password
+
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {"Authorization": f"Bearer {AIRTABLE_READ_TOKEN}"}
+
+            # Fetch all team members
+            team_url = f"https://api.airtable.com/v0/{CONTACTS_DATABASE_BASE_ID}/{TEAM_TABLE_ID}"
+            response = await client.get(team_url, headers=headers)
+            data = response.json()
+
+            if response.status_code != 200:
+                return JSONResponse(
+                    {"error": f"Failed to fetch team data: {data.get('error', {}).get('message', 'Unknown error')}"},
+                    status_code=response.status_code
+                )
+
+            # Find matching user
+            for record in data.get("records", []):
+                fields = record.get("fields", {})
+                user_email = str(fields.get("Email", "")).strip().lower()
+                user_password = str(fields.get("Password", "")).strip()
+
+                if user_email == email.strip().lower() and user_password == password:
+                    # Successful login
+                    return JSONResponse({
+                        "success": True,
+                        "user": {
+                            "id": record["id"],
+                            "employeeId": fields.get("Employee ID", ""),
+                            "name": fields.get("Name", ""),
+                            "email": fields.get("Email", ""),
+                            "workingStatus": fields.get("Working Status", ""),
+                            "employeeType": fields.get("Employee Type", []),
+                            "employeeLevel": fields.get("Employee Level", ""),
+                            "phoneNumber": fields.get("Phone Number", ""),
+                        }
+                    })
+
+            # No match found
+            return JSONResponse(
+                {"error": "Invalid email or password"},
+                status_code=401
+            )
+
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"Login failed: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.post("/api/add-lead")
+async def add_lead(request: AddLeadRequest):
+    """
+    Add a new company and associated contacts to the Lead Collection database.
+    Auto-generates Company ID and links contacts to the company.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
+
+            # Step 1: Generate Company ID
+            # Fetch existing companies to determine next ID
+            companies_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{COMPANY_TABLE_ID}"
+            companies_response = await client.get(companies_url, headers=headers)
+            companies_data = companies_response.json()
+
+            if companies_response.status_code != 200:
+                return JSONResponse(
+                    {"error": f"Failed to fetch companies: {companies_data.get('error', {}).get('message', 'Unknown error')}"},
+                    status_code=companies_response.status_code
+                )
+
+            # Generate next Company ID
+            existing_ids = []
+            for record in companies_data.get("records", []):
+                company_id = record.get("fields", {}).get("CompanyID", "")
+                if company_id and company_id.startswith("COMP"):
+                    try:
+                        num = int(company_id.replace("COMP", ""))
+                        existing_ids.append(num)
+                    except ValueError:
+                        continue
+
+            next_id = max(existing_ids, default=0) + 1
+            company_id = f"COMP{next_id:04d}"  # e.g., COMP0001, COMP0002, etc.
+
+            # Step 2: Create Company record
+            company_payload = {
+                "fields": {
+                    "CompanyID": company_id,
+                    "Company Name": request.companyName,
+                    "Country": request.country,
+                    "State": request.state if request.state else "",
+                    "Qualification": request.qualification,
+                    "CreatedBy": request.createdBy,
+                    "Notes": request.notes,
+                }
+            }
+
+            company_create_response = await client.post(
+                companies_url,
+                headers=headers,
+                json=company_payload
+            )
+            company_create_data = company_create_response.json()
+
+            if company_create_response.status_code != 200:
+                return JSONResponse(
+                    {"error": f"Failed to create company: {company_create_data.get('error', {}).get('message', 'Unknown error')}"},
+                    status_code=company_create_response.status_code
+                )
+
+            company_record_id = company_create_data["id"]
+
+            # Step 3: Create Contact records for each POC
+            contacts_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
+
+            # Generate Contact IDs
+            contacts_fetch_response = await client.get(contacts_url, headers=headers)
+            contacts_fetch_data = contacts_fetch_response.json()
+
+            existing_contact_ids = []
+            for record in contacts_fetch_data.get("records", []):
+                contact_id = record.get("fields", {}).get("ContactId", "")
+                if contact_id and contact_id.startswith("CON"):
+                    try:
+                        num = int(contact_id.replace("CON", ""))
+                        existing_contact_ids.append(num)
+                    except ValueError:
+                        continue
+
+            next_contact_id = max(existing_contact_ids, default=0) + 1
+
+            created_contacts = []
+            for idx, poc in enumerate(request.pocs):
+                contact_id = f"CON{next_contact_id + idx:04d}"
+
+                contact_payload = {
+                    "fields": {
+                        "ContactId": contact_id,
+                        "Email Name": poc.email,
+                        "CompanyId": [company_record_id],  # Link to company
+                        "Phone Number": poc.phoneNumber if poc.phoneNumber else "",
+                        "Position": poc.position,
+                        "Tags": poc.tags,
+                    }
+                }
+
+                contact_create_response = await client.post(
+                    contacts_url,
+                    headers=headers,
+                    json=contact_payload
+                )
+
+                if contact_create_response.status_code == 200:
+                    created_contacts.append(contact_create_response.json())
+
+            return JSONResponse({
+                "success": True,
+                "company": {
+                    "id": company_record_id,
+                    "companyId": company_id,
+                    "name": request.companyName,
+                },
+                "contacts": [
+                    {
+                        "id": c["id"],
+                        "contactId": c["fields"]["ContactId"],
+                        "email": c["fields"]["Email Name"],
+                    }
+                    for c in created_contacts
+                ],
+            })
+
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"Failed to add lead: {str(e)}"},
+            status_code=500
+        )
+
+
+# ---------------------------------------------------------------------------
+# Lead Collection Search
+# ---------------------------------------------------------------------------
+
+@app.get("/api/search-leads")
+async def search_leads(q: str = Query(..., min_length=1)):
+    """
+    Search companies and contacts in the Lead Collection Airtable base.
+    Searches by company name, email, contact ID, and company ID.
+    """
+    query = q.strip().lower()
+
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
+
+            # Search companies
+            companies_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{COMPANY_TABLE_ID}"
+            companies_response = await client.get(companies_url, headers=headers)
+            companies_data = companies_response.json()
+
+            # Search contacts
+            contacts_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
+            contacts_response = await client.get(contacts_url, headers=headers)
+            contacts_data = contacts_response.json()
+
+            if companies_response.status_code != 200:
+                return JSONResponse(
+                    {"error": f"Failed to fetch companies: {companies_data.get('error', {}).get('message', 'Unknown error')}"},
+                    status_code=companies_response.status_code
+                )
+
+            if contacts_response.status_code != 200:
+                return JSONResponse(
+                    {"error": f"Failed to fetch contacts: {contacts_data.get('error', {}).get('message', 'Unknown error')}"},
+                    status_code=contacts_response.status_code
+                )
+
+            # Filter companies
+            filtered_companies = []
+            for record in companies_data.get("records", []):
+                fields = record.get("fields", {})
+                company_name = str(fields.get("Company Name", "")).lower()
+                company_id = str(fields.get("CompanyID", "")).lower()
+                country = str(fields.get("Country", "")).lower()
+                state = str(fields.get("State", "")).lower()
+
+                if (query in company_name or
+                    query in company_id or
+                    query in country or
+                    query in state):
+                    filtered_companies.append({
+                        "id": record["id"],
+                        "CompanyID": fields.get("CompanyID", ""),
+                        "Company Name": fields.get("Company Name", ""),
+                        "Country": fields.get("Country", ""),
+                        "State": fields.get("State", ""),
+                        "CreatedBy": fields.get("CreatedBy", ""),
+                        "Notes": fields.get("Notes", ""),
+                    })
+
+            # Filter contacts
+            filtered_contacts = []
+            for record in contacts_data.get("records", []):
+                fields = record.get("fields", {})
+                email = str(fields.get("Email Name", "")).lower()
+                contact_id = str(fields.get("ContactId", "")).lower()
+                phone = str(fields.get("Phone Number", "")).lower()
+
+                if (query in email or
+                    query in contact_id or
+                    query in phone):
+                    filtered_contacts.append({
+                        "id": record["id"],
+                        "ContactId": fields.get("ContactId", ""),
+                        "Email Name": fields.get("Email Name", ""),
+                        "Phone Number": fields.get("Phone Number", ""),
+                        "Tags": fields.get("Tags", ""),
+                    })
+
+            return JSONResponse({
+                "companies": filtered_companies,
+                "contacts": filtered_contacts,
+            })
+
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"Search failed: {str(e)}"},
+            status_code=500
+        )
