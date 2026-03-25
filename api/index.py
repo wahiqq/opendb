@@ -534,9 +534,10 @@ async def add_lead(request: AddLeadRequest):
 
                 contact_payload = {
                     "fields": {
-                        "ContactId": contact_id,
-                        "Email Name": poc.email,
-                        "CompanyId": [company_record_id],  # Link to company
+                        "ContactID": contact_id,
+                        "Name": poc.name,
+                        "Email": poc.email,
+                        "CompanyID": [company_record_id],  # Link to company
                         "Phone Number": poc.phoneNumber if poc.phoneNumber else "",
                         "Position": poc.position,
                         "Tags": poc.tags,
@@ -562,8 +563,8 @@ async def add_lead(request: AddLeadRequest):
                 "contacts": [
                     {
                         "id": c["id"],
-                        "contactId": c["fields"]["ContactId"],
-                        "email": c["fields"]["Email Name"],
+                        "contactId": c["fields"]["ContactID"],
+                        "email": c["fields"]["Email"],
                     }
                     for c in created_contacts
                 ],
@@ -637,23 +638,52 @@ async def search_leads(q: str = Query(..., min_length=1)):
                         "Notes": fields.get("Notes", ""),
                     })
 
+            # Create a company lookup map (Airtable record ID -> company details)
+            company_lookup = {}
+            for record in companies_data.get("records", []):
+                fields = record.get("fields", {})
+                company_lookup[record["id"]] = {
+                    "id": record["id"],
+                    "CompanyID": fields.get("CompanyID", ""),
+                    "Company Name": fields.get("Company Name", ""),
+                    "Country": fields.get("Country", ""),
+                    "State": fields.get("State", ""),
+                    "CreatedBy": fields.get("CreatedBy", ""),
+                    "Notes": fields.get("Notes", ""),
+                }
+
             # Filter contacts
             filtered_contacts = []
             for record in contacts_data.get("records", []):
                 fields = record.get("fields", {})
-                email = str(fields.get("Email Name", "")).lower()
-                contact_id = str(fields.get("ContactId", "")).lower()
+                name = str(fields.get("Name", "")).lower()
+                email = str(fields.get("Email", "")).lower()
+                contact_id = str(fields.get("ContactID", "")).lower()
                 phone = str(fields.get("Phone Number", "")).lower()
+                position = str(fields.get("Position", "")).lower()
 
-                if (query in email or
+                if (query in name or
+                    query in email or
                     query in contact_id or
-                    query in phone):
+                    query in phone or
+                    query in position):
+                    # Get the company this contact belongs to
+                    company_ids = fields.get("CompanyID", [])
+                    company_data = None
+                    if company_ids and len(company_ids) > 0:
+                        company_id = company_ids[0]  # Airtable link field returns array
+                        company_data = company_lookup.get(company_id)
+
                     filtered_contacts.append({
                         "id": record["id"],
-                        "ContactId": fields.get("ContactId", ""),
-                        "Email Name": fields.get("Email Name", ""),
+                        "ContactID": fields.get("ContactID", ""),
+                        "Name": fields.get("Name", ""),
+                        "Email": fields.get("Email", ""),
                         "Phone Number": fields.get("Phone Number", ""),
+                        "Position": fields.get("Position", ""),
                         "Tags": fields.get("Tags", ""),
+                        "CompanyID": company_ids[0] if company_ids else None,
+                        "Company": company_data,  # Include full company details
                     })
 
             return JSONResponse({
