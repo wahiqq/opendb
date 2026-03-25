@@ -192,15 +192,15 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                 width: '100%',
                 padding: '12px 16px',
                 fontSize: '15px',
-                border: '1px solid var(--border-strong)',
+                border: '2px solid var(--gray-300)',
                 borderRadius: '10px',
                 outline: 'none',
                 background: 'var(--surface)',
                 color: 'var(--text)',
                 fontFamily: 'inherit',
               }}
-              onFocus={(e) => e.target.style.borderColor = 'var(--green-600)'}
-              onBlur={(e) => e.target.style.borderColor = 'var(--border-strong)'}
+              onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+              onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
             />
           </div>
 
@@ -224,15 +224,15 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                   width: '100%',
                   padding: '12px 16px',
                   fontSize: '15px',
-                  border: '1px solid var(--border-strong)',
+                  border: '2px solid var(--gray-300)',
                   borderRadius: '10px',
                   outline: 'none',
                   background: 'var(--surface)',
                   color: 'var(--text)',
                   fontFamily: 'inherit',
                 }}
-                onFocus={(e) => e.target.style.borderColor = 'var(--green-600)'}
-                onBlur={(e) => e.target.style.borderColor = 'var(--border-strong)'}
+                onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
               />
             </div>
 
@@ -254,15 +254,15 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                   width: '100%',
                   padding: '12px 16px',
                   fontSize: '15px',
-                  border: '1px solid var(--border-strong)',
+                  border: '2px solid var(--gray-300)',
                   borderRadius: '10px',
                   outline: 'none',
                   background: 'var(--surface)',
                   color: 'var(--text)',
                   fontFamily: 'inherit',
                 }}
-                onFocus={(e) => e.target.style.borderColor = 'var(--green-600)'}
-                onBlur={(e) => e.target.style.borderColor = 'var(--border-strong)'}
+                onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
               />
             </div>
           </div>
@@ -285,7 +285,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                 width: '100%',
                 padding: '12px 16px',
                 fontSize: '15px',
-                border: '1px solid var(--border-strong)',
+                border: '2px solid var(--gray-300)',
                 borderRadius: '10px',
                 outline: 'none',
                 background: 'var(--surface)',
@@ -293,8 +293,8 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                 fontFamily: 'inherit',
                 cursor: 'pointer',
               }}
-              onFocus={(e) => e.target.style.borderColor = 'var(--green-600)'}
-              onBlur={(e) => e.target.style.borderColor = 'var(--border-strong)'}
+              onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+              onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
             >
               <option value="">Select company size</option>
               {QUALIFICATION_OPTIONS.map((opt) => (
@@ -324,7 +324,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                 width: '100%',
                 padding: '12px 16px',
                 fontSize: '15px',
-                border: '1px solid var(--border-strong)',
+                border: '2px solid var(--gray-300)',
                 borderRadius: '10px',
                 outline: 'none',
                 background: 'var(--surface)',
@@ -332,8 +332,8 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                 fontFamily: 'inherit',
                 resize: 'vertical',
               }}
-              onFocus={(e) => e.target.style.borderColor = 'var(--green-600)'}
-              onBlur={(e) => e.target.style.borderColor = 'var(--border-strong)'}
+              onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+              onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
             />
           </div>
 
@@ -451,13 +451,15 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                       width: '100%',
                       padding: '10px 12px',
                       fontSize: '14px',
-                      border: '1px solid var(--border-strong)',
+                      border: '2px solid var(--gray-300)',
                       borderRadius: '8px',
                       outline: 'none',
                       background: 'var(--surface)',
                       color: 'var(--text)',
                       fontFamily: 'inherit',
                     }}
+                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
                   />
                 </div>
 
@@ -479,13 +481,15 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                       width: '100%',
                       padding: '10px 12px',
                       fontSize: '14px',
-                      border: '1px solid var(--border-strong)',
+                      border: '2px solid var(--gray-300)',
                       borderRadius: '8px',
                       outline: 'none',
                       background: 'var(--surface)',
                       color: 'var(--text)',
                       fontFamily: 'inherit',
                     }}
+                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
                   />
                 </div>
 
@@ -508,13 +512,15 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                       width: '100%',
                       padding: '10px 12px',
                       fontSize: '14px',
-                      border: '1px solid var(--border-strong)',
+                      border: '2px solid var(--gray-300)',
                       borderRadius: '8px',
                       outline: 'none',
                       background: 'var(--surface)',
                       color: 'var(--text)',
                       fontFamily: 'inherit',
                     }}
+                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
                   />
                 </div>
 
@@ -536,13 +542,15 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                       width: '100%',
                       padding: '10px 12px',
                       fontSize: '14px',
-                      border: '1px solid var(--border-strong)',
+                      border: '2px solid var(--gray-300)',
                       borderRadius: '8px',
                       outline: 'none',
                       background: 'var(--surface)',
                       color: 'var(--text)',
                       fontFamily: 'inherit',
                     }}
+                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
                   />
                 </div>
 
@@ -563,7 +571,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                       width: '100%',
                       padding: '10px 12px',
                       fontSize: '14px',
-                      border: '1px solid var(--border-strong)',
+                      border: '2px solid var(--gray-300)',
                       borderRadius: '8px',
                       outline: 'none',
                       background: 'var(--surface)',
@@ -571,6 +579,8 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                       fontFamily: 'inherit',
                       cursor: 'pointer',
                     }}
+                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
                   >
                     <option value="">Select a tag</option>
                     {TAG_OPTIONS.map((tag) => (
