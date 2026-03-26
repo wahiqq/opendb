@@ -622,8 +622,12 @@ input[type="file"] {
   color: rgba(255,255,255,0.85);
   font-weight: 500;
   max-width: 600px;
-  margin: 0 auto;
+  margin: 0 auto 24px;
   line-height: 1.6;
+}
+
+.dash-hero input::placeholder {
+  color: rgba(255,255,255,0.55);
 }
 
 .page-header {
@@ -703,7 +707,7 @@ input[type="file"] {
 .dash-body {
   max-width: 1200px;
   margin: 0 auto;
-  padding: clamp(40px, 8vw, 80px) 24px;
+  padding: clamp(24px, 4vw, 48px) 24px;
 }
 
 .dash-body > h2 {

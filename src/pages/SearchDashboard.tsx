@@ -108,10 +108,7 @@ export default function SearchDashboard() {
         </div>
         <h1>Search Dashboard</h1>
         <p>Search companies and contacts in your lead collection database.</p>
-      </div>
-
-      <div className="dash-body">
-        <div style={{ maxWidth: '600px', margin: '0 auto 2rem', position: 'relative' }}>
+        <div style={{ maxWidth: '720px', margin: '0 auto', position: 'relative' }}>
           <input
             type="text"
             value={query}
@@ -120,37 +117,41 @@ export default function SearchDashboard() {
             autoFocus
             style={{
               width: '100%',
-              padding: '12px 16px 12px 40px',
-              fontSize: '15px',
-              border: '2px solid var(--gray-300)',
-              borderRadius: '10px',
+              padding: '14px 20px 14px 46px',
+              fontSize: '16px',
+              border: '2px solid rgba(255,255,255,0.3)',
+              borderRadius: '12px',
               outline: 'none',
-              background: 'var(--surface)',
-              color: 'var(--text)',
+              background: 'rgba(255,255,255,0.15)',
+              color: '#fff',
+              backdropFilter: 'blur(10px)',
+              boxSizing: 'border-box',
             }}
-            onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-            onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
+            onFocus={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.7)'}
+            onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.3)'}
           />
           <IconSearch style={{
             position: 'absolute',
-            left: '12px',
+            left: '16px',
             top: '50%',
             transform: 'translateY(-50%)',
             width: '18px',
             height: '18px',
-            color: 'var(--text-muted)',
+            color: 'rgba(255,255,255,0.7)',
             pointerEvents: 'none',
           }} />
         </div>
+      </div>
 
+      <div className="dash-body">
         {error && (
-          <div className="alert alert-error" style={{ maxWidth: '600px', margin: '0 auto 2rem' }}>
+          <div className="alert alert-error" style={{ maxWidth: '900px', margin: '0 auto 2rem' }}>
             {error}
           </div>
         )}
 
         {loading && (
-          <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
             {[...Array(3)].map((_, i) => (
               <div key={i} className="card" style={{ marginBottom: '1rem', opacity: 1 }}>
                 <div style={{
@@ -175,7 +176,7 @@ export default function SearchDashboard() {
         )}
 
         {!loading && results && (
-          <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
             {/* Companies Section */}
             {results.companies.length > 0 && (
               <div style={{ marginBottom: '3rem' }}>
