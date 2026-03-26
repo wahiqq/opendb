@@ -370,6 +370,7 @@ class AddLeadRequest(BaseModel):
     companyName: str
     country: str
     state: str
+    website: str = ""
     qualification: str
     notes: str
     createdBy: str
@@ -762,6 +763,7 @@ async def get_company(company_id: str):
                 "Company Name": fields.get("Company Name", ""),
                 "Country": fields.get("Country", ""),
                 "State": fields.get("State", ""),
+                "Website": fields.get("Website", ""),
                 "CreatedBy": fields.get("CreatedBy", ""),
                 "Notes": fields.get("Notes", ""),
                 "Qualification": fields.get("Qualification", ""),
@@ -834,7 +836,7 @@ async def update_company(company_id: str, request: UpdateCompanyRequest):
 
             # Patch company
             c = request.company
-            company_fields = {k: c[k] for k in ("Company Name", "Country", "State", "CreatedBy", "Notes", "Qualification") if k in c}
+            company_fields = {k: c[k] for k in ("Company Name", "Country", "State", "Website", "CreatedBy", "Notes", "Qualification") if k in c}
             patch_res = await client.patch(
                 f"{companies_url}/{record_id}",
                 headers=headers,
