@@ -158,6 +158,101 @@ function EditableField({ label, value, onSave, multiline }: EditableFieldProps) 
   )
 }
 
+// ─── Website Editable Field (with N/A checkbox) ───────────────────────────────
+
+function WebsiteEditableField({ value, onSave }: { value: string; onSave: (val: string) => Promise<void> }) {
+  const isNA = value === 'NA'
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(isNA ? '' : value)
+  const [naChecked, setNaChecked] = useState(isNA)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSave() {
+    const val = naChecked ? 'NA' : draft.trim()
+    if (!naChecked && !val) { setError('Website is required (or mark as Not available)'); return }
+    setSaving(true)
+    setError('')
+    try {
+      await onSave(val)
+      setEditing(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleCancel() {
+    setDraft(isNA ? '' : value)
+    setNaChecked(isNA)
+    setEditing(false)
+    setError('')
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '7px 10px', fontSize: '14px',
+    border: '1.5px solid var(--primary)', borderRadius: '6px',
+    background: naChecked ? 'var(--gray-50)' : 'var(--surface)',
+    color: naChecked ? 'var(--text-muted)' : 'var(--text)',
+    boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit',
+    cursor: naChecked ? 'not-allowed' : 'text', opacity: naChecked ? 0.6 : 1,
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Website
+        </span>
+        {editing && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={naChecked}
+              onChange={e => { setNaChecked(e.target.checked); if (e.target.checked) setDraft('') }}
+              style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+            />
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
+          </label>
+        )}
+      </div>
+      {editing ? (
+        <div>
+          <input
+            type="text"
+            value={draft}
+            disabled={naChecked}
+            onChange={e => setDraft(e.target.value)}
+            placeholder={naChecked ? '' : 'https://example.com'}
+            autoFocus={!naChecked}
+            style={inputStyle}
+            onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') handleCancel() }}
+          />
+          {error && <p style={{ fontSize: '12px', color: 'var(--error-text)', marginTop: '4px' }}>{error}</p>}
+          <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 600, background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '6px', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button onClick={handleCancel} style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 600, background: 'none', color: 'var(--text-muted)', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+          <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: value && value !== 'NA' ? 'var(--text)' : 'var(--text-muted)', flex: 1, fontStyle: value === 'NA' ? 'italic' : 'normal' }}>
+            {value === 'NA' ? 'Not available' : (value || '—')}
+          </p>
+          <button onClick={() => { setDraft(value === 'NA' ? '' : value); setNaChecked(value === 'NA'); setEditing(true) }} style={{ flexShrink: 0, padding: '2px 10px', fontSize: '12px', fontWeight: 600, background: 'none', color: 'var(--primary)', border: '1px solid var(--primary-light)', borderRadius: '5px', cursor: 'pointer' }}>
+            Edit
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Qualification Single-Select ──────────────────────────────────────────────
 
 function QualificationField({ value, onSave }: { value: string; onSave: (val: string) => Promise<void> }) {
@@ -1069,7 +1164,7 @@ export default function CompanyPage() {
                 await saveCompanyField('State', val)
               }}
             />
-            <EditableField label="Website" value={company.Website} onSave={val => saveCompanyField('Website', val)} />
+            <WebsiteEditableField value={company.Website} onSave={val => saveCompanyField('Website', val)} />
             <ReadOnlyField label="Created By" value={company.CreatedBy} />
             <div style={{ gridColumn: '1 / -1' }}>
               <QualificationField value={company.Qualification} onSave={val => saveCompanyField('Qualification', val)} />
