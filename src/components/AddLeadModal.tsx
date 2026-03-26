@@ -13,6 +13,25 @@ interface POC {
   position: string
 }
 
+// A slot is either committed (saved=true) or being edited (saved=false)
+interface POCSlot {
+  id: string
+  saved: boolean
+  data: POC
+  // editing state (only relevant when saved=false)
+  draft: {
+    name: string
+    email: string
+    emailFName: string
+    emailFNameLocked: boolean
+    personalEmail: string
+    personalEmailNA: boolean
+    phoneNumber: string
+    position: string
+    tags: string
+  }
+}
+
 interface AddLeadModalProps {
   onClose: () => void
   onSuccess: () => void
@@ -23,11 +42,45 @@ interface AddLeadModalProps {
 }
 
 const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool']
-const QUALIFICATION_OPTIONS = [
-  { value: 'Small', label: 'Small (1-2 people)' },
+const COMPANY_SIZE_OPTIONS = [
+  { value: 'Small', label: 'Small (1-3 people)' },
   { value: 'MSME', label: 'MSME (less than 20 people)' },
   { value: 'Enterprise', label: 'Enterprise (more than 30 people)' },
 ]
+
+const SIZE_RULES: Record<string, { min: number; max: number }> = {
+  Small: { min: 1, max: 3 },
+  MSME: { min: 3, max: 5 },
+  Enterprise: { min: 5, max: 10 },
+}
+
+function newDraft() {
+  return {
+    name: '',
+    email: '',
+    emailFName: '',
+    emailFNameLocked: true,
+    personalEmail: '',
+    personalEmailNA: false,
+    phoneNumber: '',
+    position: '',
+    tags: '',
+  }
+}
+
+function newSlot(): POCSlot {
+  const id = Date.now().toString() + Math.random().toString(36).slice(2)
+  return {
+    id,
+    saved: false,
+    data: { id, name: '', email: '', emailFName: '', personalEmail: '', phoneNumber: '', tags: '', position: '' },
+    draft: newDraft(),
+  }
+}
+
+function deriveFName(name: string) {
+  return name.trim().split(/\s+/)[0] || ''
+}
 
 export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLeadModalProps) {
   const [companyName, setCompanyName] = useState('')
@@ -35,73 +88,122 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
   const [state, setState] = useState('')
   const [isRemote, setIsRemote] = useState(false)
   const [website, setWebsite] = useState('')
-  const [qualification, setQualification] = useState('')
+  const [companySize, setCompanySize] = useState('')
   const [notes, setNotes] = useState('')
-  const [pocs, setPocs] = useState<POC[]>([])
-  const [showPocForm, setShowPocForm] = useState(false)
-
-  // POC form fields
-  const [pocName, setPocName] = useState('')
-  const [pocEmail, setPocEmail] = useState('')
-  const [pocPersonalEmail, setPocPersonalEmail] = useState('')
-  const [pocPersonalEmailNA, setPocPersonalEmailNA] = useState(false)
-  const [pocPhone, setPocPhone] = useState('')
-  const [pocPosition, setPocPosition] = useState('')
-  const [pocTags, setPocTags] = useState('')
-  const [pocEmailFName, setPocEmailFName] = useState('')
-  const [pocEmailFNameLocked, setPocEmailFNameLocked] = useState(true)
-
-  function deriveFName(name: string) {
-    return name.trim().split(/\s+/)[0] || ''
-  }
-
+  const [slots, setSlots] = useState<POCSlot[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  function addPoc() {
-    if (!pocName.trim() || !pocEmail.trim() || !pocPosition.trim() || !pocTags) {
-      setError('Name, Email, Position, and Tags are required for POC')
+  // When company size changes, reset slots to the minimum count for that size
+  function handleSizeChange(size: string) {
+    setCompanySize(size)
+    setError('')
+    if (!size || !SIZE_RULES[size]) {
+      setSlots([])
       return
     }
-
-    const newPoc: POC = {
-      id: Date.now().toString(),
-      name: pocName.trim(),
-      email: pocEmail.trim(),
-      emailFName: pocEmailFName.trim() || deriveFName(pocName),
-      personalEmail: pocPersonalEmailNA ? '' : pocPersonalEmail.trim(),
-      phoneNumber: pocPhone.trim(),
-      position: pocPosition.trim(),
-      tags: pocTags,
-    }
-
-    setPocs([...pocs, newPoc])
-
-    // Reset POC form
-    setPocName('')
-    setPocEmail('')
-    setPocPersonalEmail('')
-    setPocPersonalEmailNA(false)
-    setPocPhone('')
-    setPocPosition('')
-    setPocTags('')
-    setPocEmailFName('')
-    setPocEmailFNameLocked(true)
-    setShowPocForm(false)
-    setError('')
+    const { min } = SIZE_RULES[size]
+    const initial: POCSlot[] = Array.from({ length: min }, () => newSlot())
+    setSlots(initial)
   }
 
-  function removePoc(id: string) {
-    setPocs(pocs.filter(p => p.id !== id))
+  function updateDraft(slotId: string, patch: Partial<POCSlot['draft']>) {
+    setSlots(prev => prev.map(s =>
+      s.id === slotId ? { ...s, draft: { ...s.draft, ...patch } } : s
+    ))
   }
+
+  function saveSlot(slotId: string) {
+    setSlots(prev => {
+      const slot = prev.find(s => s.id === slotId)
+      if (!slot) return prev
+      const d = slot.draft
+      if (!d.name.trim() || !d.email.trim() || !d.position.trim() || !d.tags) {
+        setError('Name, Work Email, Position, and Tags are required for each POC')
+        return prev
+      }
+      setError('')
+      const poc: POC = {
+        id: slot.id,
+        name: d.name.trim(),
+        email: d.email.trim(),
+        emailFName: d.emailFName.trim() || deriveFName(d.name),
+        personalEmail: d.personalEmailNA ? '' : d.personalEmail.trim(),
+        phoneNumber: d.phoneNumber.trim(),
+        position: d.position.trim(),
+        tags: d.tags,
+      }
+      return prev.map(s => s.id === slotId ? { ...s, saved: true, data: poc } : s)
+    })
+  }
+
+  function editSlot(slotId: string) {
+    setSlots(prev => prev.map(s => {
+      if (s.id !== slotId) return s
+      return {
+        ...s,
+        saved: false,
+        draft: {
+          name: s.data.name,
+          email: s.data.email,
+          emailFName: s.data.emailFName,
+          emailFNameLocked: true,
+          personalEmail: s.data.personalEmail,
+          personalEmailNA: s.data.personalEmail === '' && s.data.name !== '', // heuristic: empty after saved = N/A
+          phoneNumber: s.data.phoneNumber,
+          position: s.data.position,
+          tags: s.data.tags,
+        },
+      }
+    }))
+  }
+
+  function removeSlot(slotId: string) {
+    if (!companySize || !SIZE_RULES[companySize]) return
+    const { min } = SIZE_RULES[companySize]
+    setSlots(prev => {
+      if (prev.length <= min) return prev
+      return prev.filter(s => s.id !== slotId)
+    })
+  }
+
+  function addSlot() {
+    if (!companySize || !SIZE_RULES[companySize]) return
+    const { max } = SIZE_RULES[companySize]
+    if (slots.length >= max) return
+    setSlots(prev => [...prev, newSlot()])
+  }
+
+  const savedCount = slots.filter(s => s.saved).length
+  const rules = companySize ? SIZE_RULES[companySize] : null
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
 
-    if (!companyName.trim() || (!isRemote && !country.trim()) || !qualification || !notes.trim()) {
-      setError('Company Name, Country, Qualification, and Notes are required')
+    if (!companyName.trim() || (!isRemote && !country.trim()) || !companySize || !notes.trim()) {
+      setError('Company Name, Country, Company Size, and Notes are required')
       return
+    }
+
+    // Check any unsaved slots
+    const unsaved = slots.filter(s => !s.saved)
+    if (unsaved.length > 0) {
+      setError(`You have ${unsaved.length} unsaved POC form(s). Please save or remove them before submitting.`)
+      return
+    }
+
+    // Validate POC count
+    if (rules) {
+      if (savedCount < rules.min) {
+        const sizeLabel = COMPANY_SIZE_OPTIONS.find(o => o.value === companySize)?.label || companySize
+        setError(`${sizeLabel} requires at least ${rules.min} POC${rules.min > 1 ? 's' : ''}. You have ${savedCount}.`)
+        return
+      }
+      if (savedCount > rules.max) {
+        setError(`${companySize} allows a maximum of ${rules.max} POCs. You have ${savedCount}.`)
+        return
+      }
     }
 
     setLoading(true)
@@ -115,17 +217,17 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
           country: isRemote ? 'Remote' : country.trim(),
           state: isRemote ? '' : state.trim(),
           website: website.trim(),
-          qualification: qualification,
+          qualification: companySize,
           notes: notes.trim(),
           createdBy: currentUser.name,
-          pocs: pocs.map(p => ({
-            name: p.name,
-            email: p.email,
-            emailFName: p.emailFName,
-            personalEmail: p.personalEmail,
-            phoneNumber: p.phoneNumber,
-            position: p.position,
-            tags: p.tags,
+          pocs: slots.filter(s => s.saved).map(s => ({
+            name: s.data.name,
+            email: s.data.email,
+            emailFName: s.data.emailFName,
+            personalEmail: s.data.personalEmail,
+            phoneNumber: s.data.phoneNumber,
+            position: s.data.position,
+            tags: s.data.tags,
           })),
         }),
       })
@@ -142,6 +244,29 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
     } finally {
       setLoading(false)
     }
+  }
+
+  // ── Styles ──────────────────────────────────────────────────────────────────
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '10px 12px',
+    fontSize: '14px',
+    border: '2px solid var(--gray-300)',
+    borderRadius: '8px',
+    outline: 'none',
+    background: 'var(--surface)',
+    color: 'var(--text)',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box',
+  }
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: '0.8rem',
+    fontWeight: 700,
+    color: 'var(--text)',
+    marginBottom: '6px',
   }
 
   return (
@@ -181,13 +306,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
           </h2>
           <button
             onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '8px',
-              color: 'var(--text-muted)',
-            }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px', color: 'var(--text-muted)' }}
           >
             <IconX style={{ width: 20, height: 20 }} />
           </button>
@@ -195,14 +314,9 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
 
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ padding: '24px' }}>
+          {/* Company Name */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '0.875rem',
-              fontWeight: 700,
-              color: 'var(--text)',
-              marginBottom: '8px',
-            }}>
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)', marginBottom: '8px' }}>
               Company Name <span style={{ color: 'var(--error)' }}>*</span>
             </label>
             <input
@@ -210,22 +324,13 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
               required
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                fontSize: '15px',
-                border: '2px solid var(--gray-300)',
-                borderRadius: '10px',
-                outline: 'none',
-                background: 'var(--surface)',
-                color: 'var(--text)',
-                fontFamily: 'inherit',
-              }}
+              style={{ width: '100%', padding: '12px 16px', fontSize: '15px', border: '2px solid var(--gray-300)', borderRadius: '10px', outline: 'none', background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
               onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
               onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
             />
           </div>
 
+          {/* Remote checkbox */}
           <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', width: 'fit-content' }}>
               <input
@@ -238,55 +343,27 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
             </label>
           </div>
 
+          {/* Country / State */}
           {!isRemote && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
               <div>
-                <label style={{
-                  display: 'block',
-                  fontSize: '0.875rem',
-                  fontWeight: 700,
-                  color: 'var(--text)',
-                  marginBottom: '8px',
-                }}>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)', marginBottom: '8px' }}>
                   Country <span style={{ color: 'var(--error)' }}>*</span>
                 </label>
-                <CountrySelect
-                  value={country}
-                  onChange={(val) => {
-                    setCountry(val)
-                    setState('')
-                  }}
-                  required
-                />
+                <CountrySelect value={country} onChange={(val) => { setCountry(val); setState('') }} required />
               </div>
-
               <div>
-                <label style={{
-                  display: 'block',
-                  fontSize: '0.875rem',
-                  fontWeight: 700,
-                  color: 'var(--text)',
-                  marginBottom: '8px',
-                }}>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)', marginBottom: '8px' }}>
                   State <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span>
                 </label>
-                <StateField
-                  country={country}
-                  value={state}
-                  onChange={setState}
-                />
+                <StateField country={country} value={state} onChange={setState} />
               </div>
             </div>
           )}
 
+          {/* Website */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '0.875rem',
-              fontWeight: 700,
-              color: 'var(--text)',
-              marginBottom: '8px',
-            }}>
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)', marginBottom: '8px' }}>
               Website <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span>
             </label>
             <input
@@ -294,68 +371,42 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
               value={website}
               onChange={(e) => setWebsite(e.target.value)}
               placeholder="https://example.com"
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                fontSize: '15px',
-                border: '2px solid var(--gray-300)',
-                borderRadius: '10px',
-                outline: 'none',
-                background: 'var(--surface)',
-                color: 'var(--text)',
-                fontFamily: 'inherit',
-              }}
+              style={{ width: '100%', padding: '12px 16px', fontSize: '15px', border: '2px solid var(--gray-300)', borderRadius: '10px', outline: 'none', background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
               onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
               onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
             />
           </div>
 
+          {/* Company Size */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '0.875rem',
-              fontWeight: 700,
-              color: 'var(--text)',
-              marginBottom: '8px',
-            }}>
-              Qualification <span style={{ color: 'var(--error)' }}>*</span>
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)', marginBottom: '8px' }}>
+              Company Size <span style={{ color: 'var(--error)' }}>*</span>
             </label>
             <select
-              value={qualification}
-              onChange={(e) => setQualification(e.target.value)}
+              value={companySize}
+              onChange={(e) => handleSizeChange(e.target.value)}
               required
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                fontSize: '15px',
-                border: '2px solid var(--gray-300)',
-                borderRadius: '10px',
-                outline: 'none',
-                background: 'var(--surface)',
-                color: 'var(--text)',
-                fontFamily: 'inherit',
-                cursor: 'pointer',
-              }}
+              style={{ width: '100%', padding: '12px 16px', fontSize: '15px', border: '2px solid var(--gray-300)', borderRadius: '10px', outline: 'none', background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', cursor: 'pointer' }}
               onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
               onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
             >
               <option value="">Select company size</option>
-              {QUALIFICATION_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+              {COMPANY_SIZE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
+            {companySize && rules && (
+              <div style={{ marginTop: '6px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                {companySize === 'Small' && 'Small companies require 1–3 POCs.'}
+                {companySize === 'MSME' && 'MSME companies require 3–5 POCs (minimum 3 cannot be removed).'}
+                {companySize === 'Enterprise' && 'Enterprise companies require 5–10 POCs (minimum 5 cannot be removed).'}
+              </div>
+            )}
           </div>
 
+          {/* Notes */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '0.875rem',
-              fontWeight: 700,
-              color: 'var(--text)',
-              marginBottom: '8px',
-            }}>
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)', marginBottom: '8px' }}>
               Notes <span style={{ color: 'var(--error)' }}>*</span>
             </label>
             <textarea
@@ -363,431 +414,298 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
               onChange={(e) => setNotes(e.target.value)}
               required
               rows={3}
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                fontSize: '15px',
-                border: '2px solid var(--gray-300)',
-                borderRadius: '10px',
-                outline: 'none',
-                background: 'var(--surface)',
-                color: 'var(--text)',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-              }}
+              style={{ width: '100%', padding: '12px 16px', fontSize: '15px', border: '2px solid var(--gray-300)', borderRadius: '10px', outline: 'none', background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', resize: 'vertical' }}
               onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
               onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
             />
           </div>
 
+          {/* Created By */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '0.875rem',
-              fontWeight: 700,
-              color: 'var(--text-muted)',
-              marginBottom: '8px',
-            }}>
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px' }}>
               Created By
             </label>
-            <div style={{
-              padding: '12px 16px',
-              background: 'var(--gray-50)',
-              border: '1px solid var(--border)',
-              borderRadius: '10px',
-              fontSize: '15px',
-              color: 'var(--text-muted)',
-            }}>
+            <div style={{ padding: '12px 16px', background: 'var(--gray-50)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '15px', color: 'var(--text-muted)' }}>
               {currentUser.name}
             </div>
           </div>
 
           {/* POCs Section */}
-          <div style={{
-            marginBottom: '24px',
-            padding: '20px',
-            background: 'var(--gray-50)',
-            borderRadius: '10px',
-            border: '1px solid var(--border)',
-          }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>
-              Points of Contact (POCs)
-            </h3>
+          <div style={{ marginBottom: '24px', padding: '20px', background: 'var(--gray-50)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>
+                Points of Contact (POCs)
+                {rules && (
+                  <span style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '8px' }}>
+                    {savedCount}/{slots.length} saved
+                  </span>
+                )}
+              </h3>
+            </div>
 
-            {pocs.length > 0 && (
-              <div style={{ marginBottom: '16px' }}>
-                {pocs.map((poc) => (
-                  <div
-                    key={poc.id}
-                    style={{
-                      padding: '12px',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      marginBottom: '8px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'start',
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>
-                        {poc.name} • {poc.position}
-                      </div>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                        {poc.email}
-                        {poc.phoneNumber && ` • ${poc.phoneNumber}`}
-                      </div>
-                      <div style={{ marginTop: '4px' }}>
-                        <span style={{
-                          padding: '2px 8px',
-                          background: 'var(--green-100)',
-                          color: 'var(--green-700)',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                        }}>
-                          {poc.tags}
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removePoc(poc.id)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '4px',
-                        color: 'var(--error)',
-                      }}
-                    >
-                      <IconX style={{ width: 16, height: 16 }} />
-                    </button>
-                  </div>
-                ))}
+            {!companySize && (
+              <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                Select a company size above to add POCs
               </div>
             )}
 
-            {showPocForm ? (
-              <div style={{
-                padding: '16px',
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-              }}>
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    color: 'var(--text)',
-                    marginBottom: '6px',
+            {companySize && slots.map((slot, index) => (
+              <div key={slot.id} style={{ marginBottom: '12px' }}>
+                {slot.saved ? (
+                  // ── Saved POC card ──────────────────────────────────────────
+                  <div style={{
+                    padding: '12px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'start',
                   }}>
-                    Name <span style={{ color: 'var(--error)' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={pocName}
-                    onChange={(e) => {
-                      setPocName(e.target.value)
-                      if (pocEmailFNameLocked) setPocEmailFName(deriveFName(e.target.value))
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      fontSize: '14px',
-                      border: '2px solid var(--gray-300)',
-                      borderRadius: '8px',
-                      outline: 'none',
-                      background: 'var(--surface)',
-                      color: 'var(--text)',
-                      fontFamily: 'inherit',
-                    }}
-                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
-                  />
-                </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: '4px', fontSize: '0.9rem' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: '6px' }}>#{index + 1}</span>
+                        {slot.data.name} • {slot.data.position}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {slot.data.email}
+                        {slot.data.phoneNumber && ` • ${slot.data.phoneNumber}`}
+                      </div>
+                      <div style={{ marginTop: '4px' }}>
+                        <span style={{ padding: '2px 8px', background: 'var(--green-100)', color: 'var(--green-700)', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
+                          {slot.data.tags}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                      {/* Edit */}
+                      <button
+                        type="button"
+                        onClick={() => editSlot(slot.id)}
+                        title="Edit"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--primary)' }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      </button>
+                      {/* Remove — only if above min */}
+                      {rules && slots.length > rules.min && (
+                        <button
+                          type="button"
+                          onClick={() => removeSlot(slot.id)}
+                          title="Remove"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--error)' }}
+                        >
+                          <IconX style={{ width: 15, height: 15 }} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  // ── In-progress POC form ────────────────────────────────────
+                  <div style={{ padding: '16px', background: 'var(--surface)', border: '2px solid var(--primary)', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '12px' }}>
+                      POC #{index + 1}
+                    </div>
 
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    color: 'var(--text)',
-                    marginBottom: '6px',
-                  }}>
-                    Email Name
-                    <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: '6px' }}>auto-derived from name</span>
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{
-                      flex: 1,
-                      position: 'relative',
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}>
+                    {/* Name */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <label style={labelStyle}>Name <span style={{ color: 'var(--error)' }}>*</span></label>
                       <input
                         type="text"
-                        value={pocEmailFName}
-                        readOnly={pocEmailFNameLocked}
-                        onChange={(e) => setPocEmailFName(e.target.value)}
-                        placeholder={pocName ? `Will be set to "${deriveFName(pocName)}"` : 'Enter a name above…'}
-                        style={{
-                          width: '100%',
-                          padding: '10px 12px',
-                          fontSize: '14px',
-                          border: `2px solid ${pocEmailFNameLocked ? 'var(--border)' : 'var(--primary)'}`,
-                          borderRadius: '8px',
-                          outline: 'none',
-                          background: pocEmailFNameLocked ? 'var(--gray-50)' : 'var(--surface)',
-                          color: pocEmailFNameLocked ? 'var(--text-muted)' : 'var(--text)',
-                          fontFamily: 'inherit',
-                          fontStyle: pocEmailFName ? 'normal' : 'italic',
-                          cursor: pocEmailFNameLocked ? 'default' : 'text',
+                        value={slot.draft.name}
+                        onChange={(e) => {
+                          const name = e.target.value
+                          updateDraft(slot.id, {
+                            name,
+                            emailFName: slot.draft.emailFNameLocked ? deriveFName(name) : slot.draft.emailFName,
+                          })
                         }}
+                        style={inputStyle}
+                        onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                        onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
                       />
                     </div>
-                    <button
-                      type="button"
-                      title={pocEmailFNameLocked ? 'Override value' : 'Lock to auto-derive'}
-                      onClick={() => {
-                        if (pocEmailFNameLocked) {
-                          setPocEmailFNameLocked(false)
-                        } else {
-                          setPocEmailFNameLocked(true)
-                          setPocEmailFName(deriveFName(pocName))
-                        }
-                      }}
-                      style={{
-                        flexShrink: 0,
-                        background: 'none',
-                        border: '1px solid var(--border)',
-                        borderRadius: '6px',
-                        padding: '8px',
-                        cursor: 'pointer',
-                        color: pocEmailFNameLocked ? 'var(--text-muted)' : 'var(--primary)',
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                    >
-                      {/* Pencil icon */}
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
 
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    color: 'var(--text)',
-                    marginBottom: '6px',
-                  }}>
-                    Work Email <span style={{ color: 'var(--error)' }}>*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={pocEmail}
-                    onChange={(e) => setPocEmail(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      fontSize: '14px',
-                      border: '2px solid var(--gray-300)',
-                      borderRadius: '8px',
-                      outline: 'none',
-                      background: 'var(--surface)',
-                      color: 'var(--text)',
-                      fontFamily: 'inherit',
-                    }}
-                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
-                  />
-                </div>
+                    {/* Email FNAME */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <label style={labelStyle}>
+                        Email Name
+                        <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: '6px' }}>auto-derived from name</span>
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="text"
+                          value={slot.draft.emailFName}
+                          readOnly={slot.draft.emailFNameLocked}
+                          onChange={(e) => updateDraft(slot.id, { emailFName: e.target.value })}
+                          placeholder={slot.draft.name ? `Will be set to "${deriveFName(slot.draft.name)}"` : 'Enter a name above…'}
+                          style={{
+                            ...inputStyle,
+                            border: `2px solid ${slot.draft.emailFNameLocked ? 'var(--border)' : 'var(--primary)'}`,
+                            background: slot.draft.emailFNameLocked ? 'var(--gray-50)' : 'var(--surface)',
+                            color: slot.draft.emailFNameLocked ? 'var(--text-muted)' : 'var(--text)',
+                            fontStyle: slot.draft.emailFName ? 'normal' : 'italic',
+                            cursor: slot.draft.emailFNameLocked ? 'default' : 'text',
+                          }}
+                        />
+                        <button
+                          type="button"
+                          title={slot.draft.emailFNameLocked ? 'Override value' : 'Lock to auto-derive'}
+                          onClick={() => {
+                            if (slot.draft.emailFNameLocked) {
+                              updateDraft(slot.id, { emailFNameLocked: false })
+                            } else {
+                              updateDraft(slot.id, { emailFNameLocked: true, emailFName: deriveFName(slot.draft.name) })
+                            }
+                          }}
+                          style={{ flexShrink: 0, background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: slot.draft.emailFNameLocked ? 'var(--text-muted)' : 'var(--primary)', display: 'flex', alignItems: 'center' }}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
 
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <label style={{
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
-                      color: 'var(--text)',
-                    }}>
-                      Personal Email
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                    {/* Work Email */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <label style={labelStyle}>Work Email <span style={{ color: 'var(--error)' }}>*</span></label>
                       <input
-                        type="checkbox"
-                        checked={pocPersonalEmailNA}
-                        onChange={e => setPocPersonalEmailNA(e.target.checked)}
-                        style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                        type="email"
+                        value={slot.draft.email}
+                        onChange={(e) => updateDraft(slot.id, { email: e.target.value })}
+                        style={inputStyle}
+                        onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                        onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
                       />
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Not available</span>
-                    </label>
+                    </div>
+
+                    {/* Personal Email */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <label style={{ ...labelStyle, marginBottom: 0 }}>Personal Email</label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={slot.draft.personalEmailNA}
+                            onChange={e => updateDraft(slot.id, { personalEmailNA: e.target.checked })}
+                            style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                          />
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Not available</span>
+                        </label>
+                      </div>
+                      <input
+                        type="email"
+                        value={slot.draft.personalEmail}
+                        disabled={slot.draft.personalEmailNA}
+                        onChange={(e) => updateDraft(slot.id, { personalEmail: e.target.value })}
+                        placeholder={slot.draft.personalEmailNA ? '' : 'personal@example.com'}
+                        style={{
+                          ...inputStyle,
+                          background: slot.draft.personalEmailNA ? 'var(--gray-50)' : 'var(--surface)',
+                          color: slot.draft.personalEmailNA ? 'var(--text-muted)' : 'var(--text)',
+                          cursor: slot.draft.personalEmailNA ? 'not-allowed' : 'text',
+                          opacity: slot.draft.personalEmailNA ? 0.6 : 1,
+                        }}
+                        onFocus={(e) => { if (!slot.draft.personalEmailNA) e.target.style.borderColor = 'var(--primary)' }}
+                        onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
+                      />
+                    </div>
+
+                    {/* Position */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <label style={labelStyle}>Position <span style={{ color: 'var(--error)' }}>*</span></label>
+                      <input
+                        type="text"
+                        value={slot.draft.position}
+                        onChange={(e) => updateDraft(slot.id, { position: e.target.value })}
+                        placeholder="e.g., Director, Manager, etc."
+                        style={inputStyle}
+                        onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                        onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
+                      />
+                    </div>
+
+                    {/* Phone */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <label style={labelStyle}>Phone Number (Optional)</label>
+                      <input
+                        type="tel"
+                        value={slot.draft.phoneNumber}
+                        onChange={(e) => updateDraft(slot.id, { phoneNumber: e.target.value })}
+                        style={inputStyle}
+                        onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                        onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
+                      />
+                    </div>
+
+                    {/* Tags */}
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={labelStyle}>Tags <span style={{ color: 'var(--error)' }}>*</span></label>
+                      <select
+                        value={slot.draft.tags}
+                        onChange={(e) => updateDraft(slot.id, { tags: e.target.value })}
+                        style={{ ...inputStyle, cursor: 'pointer' }}
+                        onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                        onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
+                      >
+                        <option value="">Select a tag</option>
+                        {TAG_OPTIONS.map((tag) => (
+                          <option key={tag} value={tag}>{tag}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Save / Remove buttons */}
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button type="button" onClick={() => saveSlot(slot.id)} className="btn btn-primary btn-sm">
+                        <IconCheck style={{ width: 14, height: 14 }} />
+                        Save POC
+                      </button>
+                      {rules && slots.length > rules.min && (
+                        <button
+                          type="button"
+                          onClick={() => removeSlot(slot.id)}
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: 'var(--error)' }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <input
-                    type="email"
-                    value={pocPersonalEmail}
-                    disabled={pocPersonalEmailNA}
-                    onChange={(e) => setPocPersonalEmail(e.target.value)}
-                    placeholder={pocPersonalEmailNA ? '' : 'personal@example.com'}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      fontSize: '14px',
-                      border: '2px solid var(--gray-300)',
-                      borderRadius: '8px',
-                      outline: 'none',
-                      background: pocPersonalEmailNA ? 'var(--gray-50)' : 'var(--surface)',
-                      color: pocPersonalEmailNA ? 'var(--text-muted)' : 'var(--text)',
-                      fontFamily: 'inherit',
-                      cursor: pocPersonalEmailNA ? 'not-allowed' : 'text',
-                      opacity: pocPersonalEmailNA ? 0.6 : 1,
-                    }}
-                    onFocus={(e) => { if (!pocPersonalEmailNA) e.target.style.borderColor = 'var(--primary)' }}
-                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
-                  />
-                </div>
-
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    color: 'var(--text)',
-                    marginBottom: '6px',
-                  }}>
-                    Position <span style={{ color: 'var(--error)' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={pocPosition}
-                    onChange={(e) => setPocPosition(e.target.value)}
-                    placeholder="e.g., Director, Manager, etc."
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      fontSize: '14px',
-                      border: '2px solid var(--gray-300)',
-                      borderRadius: '8px',
-                      outline: 'none',
-                      background: 'var(--surface)',
-                      color: 'var(--text)',
-                      fontFamily: 'inherit',
-                    }}
-                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
-                  />
-                </div>
-
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    color: 'var(--text)',
-                    marginBottom: '6px',
-                  }}>
-                    Phone Number (Optional)
-                  </label>
-                  <input
-                    type="tel"
-                    value={pocPhone}
-                    onChange={(e) => setPocPhone(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      fontSize: '14px',
-                      border: '2px solid var(--gray-300)',
-                      borderRadius: '8px',
-                      outline: 'none',
-                      background: 'var(--surface)',
-                      color: 'var(--text)',
-                      fontFamily: 'inherit',
-                    }}
-                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
-                  />
-                </div>
-
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    color: 'var(--text)',
-                    marginBottom: '6px',
-                  }}>
-                    Tags <span style={{ color: 'var(--error)' }}>*</span>
-                  </label>
-                  <select
-                    value={pocTags}
-                    onChange={(e) => setPocTags(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      fontSize: '14px',
-                      border: '2px solid var(--gray-300)',
-                      borderRadius: '8px',
-                      outline: 'none',
-                      background: 'var(--surface)',
-                      color: 'var(--text)',
-                      fontFamily: 'inherit',
-                      cursor: 'pointer',
-                    }}
-                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
-                  >
-                    <option value="">Select a tag</option>
-                    {TAG_OPTIONS.map((tag) => (
-                      <option key={tag} value={tag}>{tag}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={addPoc}
-                    className="btn btn-primary btn-sm"
-                  >
-                    <IconCheck style={{ width: 14, height: 14 }} />
-                    Add POC
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowPocForm(false)
-                      setPocName('')
-                      setPocEmail('')
-                      setPocPersonalEmail('')
-                      setPocPersonalEmailNA(false)
-                      setPocPhone('')
-                      setPocPosition('')
-                      setPocTags('')
-                      setPocEmailFName('')
-                      setPocEmailFNameLocked(true)
-                      setError('')
-                    }}
-                    className="btn btn-ghost btn-sm"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                )}
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowPocForm(true)}
-                className="btn btn-outline-green btn-sm"
-                style={{ width: '100%' }}
-              >
-                + Add Point of Contact
-              </button>
+            ))}
+
+            {/* Add more / at-max hint */}
+            {companySize && rules && (
+              slots.length < rules.max ? (
+                <button
+                  type="button"
+                  onClick={addSlot}
+                  className="btn btn-outline-green btn-sm"
+                  style={{ width: '100%', marginTop: slots.length > 0 ? '4px' : 0 }}
+                >
+                  + Add Another POC
+                </button>
+              ) : (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '10px',
+                  fontSize: '0.78rem',
+                  color: 'var(--text-muted)',
+                  background: 'var(--gray-100)',
+                  borderRadius: '6px',
+                  marginTop: '8px',
+                }}>
+                  Maximum {rules.max} POCs reached for {companySize}. To add more, change the company size.
+                </div>
+              )
             )}
           </div>
 
@@ -799,19 +717,10 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
 
           {/* Actions */}
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn btn-ghost"
-              disabled={loading}
-            >
+            <button type="button" onClick={onClose} className="btn btn-ghost" disabled={loading}>
               Cancel
             </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={loading}
-            >
+            <button type="submit" className="btn btn-primary" disabled={loading}>
               {loading ? 'Adding Lead...' : 'Add Lead'}
             </button>
           </div>
