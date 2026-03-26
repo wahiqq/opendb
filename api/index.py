@@ -491,6 +491,7 @@ async def add_lead(request: AddLeadRequest):
                     "Company Name": request.companyName,
                     "Country": request.country,
                     "State": request.state if request.state else "",
+                    "Website": request.website if request.website else "",
                     "Qualification": request.qualification,
                     "CreatedBy": request.createdBy,
                     "Notes": request.notes,

@@ -5,6 +5,7 @@ interface POC {
   id: string
   name: string
   email: string
+  emailFName: string
   phoneNumber: string
   tags: string
   position: string
@@ -30,6 +31,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
   const [companyName, setCompanyName] = useState('')
   const [country, setCountry] = useState('')
   const [state, setState] = useState('')
+  const [website, setWebsite] = useState('')
   const [qualification, setQualification] = useState('')
   const [notes, setNotes] = useState('')
   const [pocs, setPocs] = useState<POC[]>([])
@@ -41,6 +43,12 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
   const [pocPhone, setPocPhone] = useState('')
   const [pocPosition, setPocPosition] = useState('')
   const [pocTags, setPocTags] = useState('')
+  const [pocEmailFName, setPocEmailFName] = useState('')
+  const [pocEmailFNameLocked, setPocEmailFNameLocked] = useState(true)
+
+  function deriveFName(name: string) {
+    return name.trim().split(/\s+/)[0] || ''
+  }
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -55,6 +63,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
       id: Date.now().toString(),
       name: pocName.trim(),
       email: pocEmail.trim(),
+      emailFName: pocEmailFName.trim() || deriveFName(pocName),
       phoneNumber: pocPhone.trim(),
       position: pocPosition.trim(),
       tags: pocTags,
@@ -68,6 +77,8 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
     setPocPhone('')
     setPocPosition('')
     setPocTags('')
+    setPocEmailFName('')
+    setPocEmailFNameLocked(true)
     setShowPocForm(false)
     setError('')
   }
@@ -95,12 +106,14 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
           companyName: companyName.trim(),
           country: country.trim(),
           state: state.trim(),
+          website: website.trim(),
           qualification: qualification,
           notes: notes.trim(),
           createdBy: currentUser.name,
           pocs: pocs.map(p => ({
             name: p.name,
             email: p.email,
+            emailFName: p.emailFName,
             phoneNumber: p.phoneNumber,
             position: p.position,
             tags: p.tags,
@@ -265,6 +278,37 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                 onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
               />
             </div>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{
+              display: 'block',
+              fontSize: '0.875rem',
+              fontWeight: 700,
+              color: 'var(--text)',
+              marginBottom: '8px',
+            }}>
+              Website <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span>
+            </label>
+            <input
+              type="url"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              placeholder="https://example.com"
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                fontSize: '15px',
+                border: '2px solid var(--gray-300)',
+                borderRadius: '10px',
+                outline: 'none',
+                background: 'var(--surface)',
+                color: 'var(--text)',
+                fontFamily: 'inherit',
+              }}
+              onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+              onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
+            />
           </div>
 
           <div style={{ marginBottom: '20px' }}>
@@ -446,7 +490,10 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                   <input
                     type="text"
                     value={pocName}
-                    onChange={(e) => setPocName(e.target.value)}
+                    onChange={(e) => {
+                      setPocName(e.target.value)
+                      if (pocEmailFNameLocked) setPocEmailFName(deriveFName(e.target.value))
+                    }}
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -461,6 +508,77 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                     onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
                     onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
                   />
+                </div>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    color: 'var(--text)',
+                    marginBottom: '6px',
+                  }}>
+                    Email Name
+                    <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: '6px' }}>auto-derived from name</span>
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      flex: 1,
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}>
+                      <input
+                        type="text"
+                        value={pocEmailFName}
+                        readOnly={pocEmailFNameLocked}
+                        onChange={(e) => setPocEmailFName(e.target.value)}
+                        placeholder={pocName ? `Will be set to "${deriveFName(pocName)}"` : 'Enter a name above…'}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          fontSize: '14px',
+                          border: `2px solid ${pocEmailFNameLocked ? 'var(--border)' : 'var(--primary)'}`,
+                          borderRadius: '8px',
+                          outline: 'none',
+                          background: pocEmailFNameLocked ? 'var(--gray-50)' : 'var(--surface)',
+                          color: pocEmailFNameLocked ? 'var(--text-muted)' : 'var(--text)',
+                          fontFamily: 'inherit',
+                          fontStyle: pocEmailFName ? 'normal' : 'italic',
+                          cursor: pocEmailFNameLocked ? 'default' : 'text',
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      title={pocEmailFNameLocked ? 'Override value' : 'Lock to auto-derive'}
+                      onClick={() => {
+                        if (pocEmailFNameLocked) {
+                          setPocEmailFNameLocked(false)
+                        } else {
+                          setPocEmailFNameLocked(true)
+                          setPocEmailFName(deriveFName(pocName))
+                        }
+                      }}
+                      style={{
+                        flexShrink: 0,
+                        background: 'none',
+                        border: '1px solid var(--border)',
+                        borderRadius: '6px',
+                        padding: '8px',
+                        cursor: 'pointer',
+                        color: pocEmailFNameLocked ? 'var(--text-muted)' : 'var(--primary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      {/* Pencil icon */}
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ marginBottom: '12px' }}>
@@ -607,6 +725,8 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                       setPocPhone('')
                       setPocPosition('')
                       setPocTags('')
+                      setPocEmailFName('')
+                      setPocEmailFNameLocked(true)
                       setError('')
                     }}
                     className="btn btn-ghost btn-sm"
