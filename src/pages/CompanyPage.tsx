@@ -21,6 +21,7 @@ interface Contact {
   Name: string
   Email: string
   'Email FNAME': string
+  'Personal Email': string
   'Phone Number': string
   Position: string
   Tags: string
@@ -379,9 +380,10 @@ function ContactCard({ contact, index, onSaveField, onDelete }: ContactCardProps
     setSaving(true)
     setError('')
     try {
-      for (const field of ['Name', 'Email', 'Email FNAME', 'Phone Number', 'Position', 'Tags'] as (keyof Contact)[]) {
-        if (draft[field] !== contact[field]) {
-          await onSaveField(contact.id, field, draft[field] as string)
+      const resolved = { ...draft, 'Personal Email': draft['Personal Email'] === '__NA__' ? '' : (draft['Personal Email'] || '') }
+      for (const field of ['Name', 'Email', 'Email FNAME', 'Personal Email', 'Phone Number', 'Position', 'Tags'] as (keyof Contact)[]) {
+        if (resolved[field] !== contact[field]) {
+          await onSaveField(contact.id, field, resolved[field] as string)
         }
       }
       setEditing(false)
@@ -510,8 +512,32 @@ function ContactCard({ contact, index, onSaveField, onDelete }: ContactCardProps
               </div>
             </div>
             <div>
-              <label style={labelStyle}>Email</label>
+              <label style={labelStyle}>Work Email</label>
               <input type="text" value={draft.Email} onChange={e => setDraft(p => ({ ...p, Email: e.target.value }))} style={inputStyle} onFocus={e => e.target.style.borderColor = 'var(--primary)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>Personal Email</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={draft['Personal Email'] === '__NA__'}
+                    onChange={e => setDraft(p => ({ ...p, 'Personal Email': e.target.checked ? '__NA__' : '' }))}
+                    style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                  />
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
+                </label>
+              </div>
+              <input
+                type="text"
+                value={draft['Personal Email'] === '__NA__' ? '' : (draft['Personal Email'] || '')}
+                disabled={draft['Personal Email'] === '__NA__'}
+                onChange={e => setDraft(p => ({ ...p, 'Personal Email': e.target.value }))}
+                placeholder={draft['Personal Email'] === '__NA__' ? '' : 'personal@example.com'}
+                style={{ ...inputStyle, background: draft['Personal Email'] === '__NA__' ? 'var(--gray-50)' : 'var(--surface)', color: draft['Personal Email'] === '__NA__' ? 'var(--text-muted)' : 'var(--text)', cursor: draft['Personal Email'] === '__NA__' ? 'not-allowed' : 'text', opacity: draft['Personal Email'] === '__NA__' ? 0.6 : 1 }}
+                onFocus={e => { if (draft['Personal Email'] !== '__NA__') e.target.style.borderColor = 'var(--primary)' }}
+                onBlur={e => e.target.style.borderColor = 'var(--border)'}
+              />
             </div>
             <div>
               <label style={labelStyle}>Phone Number</label>
@@ -537,8 +563,14 @@ function ContactCard({ contact, index, onSaveField, onDelete }: ContactCardProps
             <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: contact.Name ? 'var(--text)' : 'var(--text-muted)' }}>{contact.Name || '—'}</p>
           </div>
           <div>
-            <span style={labelStyle}>Email</span>
+            <span style={labelStyle}>Work Email</span>
             <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: contact.Email ? 'var(--text)' : 'var(--text-muted)' }}>{contact.Email || '—'}</p>
+          </div>
+          <div>
+            <span style={labelStyle}>Personal Email</span>
+            <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: contact['Personal Email'] ? 'var(--text)' : 'var(--text-muted)' }}>
+              {contact['Personal Email'] || <span style={{ fontStyle: 'italic' }}>Not available</span>}
+            </p>
           </div>
           <div>
             <span style={labelStyle}>Email Name</span>
@@ -570,6 +602,7 @@ function ContactCard({ contact, index, onSaveField, onDelete }: ContactCardProps
 interface NewContact {
   Name: string
   Email: string
+  'Personal Email': string
   'Phone Number': string
   Position: string
   Tags: string
@@ -577,7 +610,8 @@ interface NewContact {
 
 function AddContactForm({ companyRecordId, companyId, onAdded }: { companyRecordId: string; companyId: string; onAdded: () => void }) {
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState<NewContact>({ Name: '', Email: '', 'Phone Number': '', Position: '', Tags: '' })
+  const [form, setForm] = useState<NewContact>({ Name: '', Email: '', 'Personal Email': '', 'Phone Number': '', Position: '', Tags: '' })
+  const [personalEmailNA, setPersonalEmailNA] = useState(false)
   const [emailFName, setEmailFName] = useState('')
   const [emailFNameLocked, setEmailFNameLocked] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -601,11 +635,12 @@ function AddContactForm({ companyRecordId, companyId, onAdded }: { companyRecord
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyRecordId, companyId, Name: form.Name, Email: form.Email, EmailFName: emailFName || form.Name.trim().split(/\s+/)[0] || '', PhoneNumber: form['Phone Number'], Position: form.Position, Tags: form.Tags }),
+        body: JSON.stringify({ companyRecordId, companyId, Name: form.Name, Email: form.Email, EmailFName: emailFName || form.Name.trim().split(/\s+/)[0] || '', PersonalEmail: personalEmailNA ? '' : form['Personal Email'], PhoneNumber: form['Phone Number'], Position: form.Position, Tags: form.Tags }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to add contact')
-      setForm({ Name: '', Email: '', 'Phone Number': '', Position: '', Tags: '' })
+      setForm({ Name: '', Email: '', 'Personal Email': '', 'Phone Number': '', Position: '', Tags: '' })
+      setPersonalEmailNA(false)
       setEmailFName('')
       setEmailFNameLocked(true)
       setOpen(false)
@@ -676,8 +711,32 @@ function AddContactForm({ companyRecordId, companyId, onAdded }: { companyRecord
           </div>
         </div>
         <div>
-          <label style={labelStyle}>Email *</label>
+          <label style={labelStyle}>Work Email *</label>
           <input type="text" value={form.Email} onChange={e => update('Email', e.target.value)} style={inputStyle} onFocus={e => e.target.style.borderColor = 'var(--primary)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+        </div>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Personal Email</label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={personalEmailNA}
+                onChange={e => setPersonalEmailNA(e.target.checked)}
+                style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+              />
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
+            </label>
+          </div>
+          <input
+            type="text"
+            value={personalEmailNA ? '' : form['Personal Email']}
+            disabled={personalEmailNA}
+            onChange={e => update('Personal Email', e.target.value)}
+            placeholder={personalEmailNA ? '' : 'personal@example.com'}
+            style={{ ...inputStyle, background: personalEmailNA ? 'var(--gray-50)' : 'var(--surface)', color: personalEmailNA ? 'var(--text-muted)' : 'var(--text)', cursor: personalEmailNA ? 'not-allowed' : 'text', opacity: personalEmailNA ? 0.6 : 1 }}
+            onFocus={e => { if (!personalEmailNA) e.target.style.borderColor = 'var(--primary)' }}
+            onBlur={e => e.target.style.borderColor = 'var(--border)'}
+          />
         </div>
         <div>
           <label style={labelStyle}>Phone Number</label>
@@ -696,7 +755,7 @@ function AddContactForm({ companyRecordId, companyId, onAdded }: { companyRecord
         <button onClick={handleAdd} disabled={saving} style={{ padding: '6px 16px', fontSize: '13px', fontWeight: 600, background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '6px', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
           {saving ? 'Adding…' : 'Add Contact'}
         </button>
-        <button onClick={() => { setOpen(false); setError(''); setEmailFName(''); setEmailFNameLocked(true) }} style={{ padding: '6px 12px', fontSize: '13px', fontWeight: 600, background: 'none', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
+        <button onClick={() => { setOpen(false); setError(''); setEmailFName(''); setEmailFNameLocked(true); setPersonalEmailNA(false) }} style={{ padding: '6px 12px', fontSize: '13px', fontWeight: 600, background: 'none', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
           Cancel
         </button>
       </div>

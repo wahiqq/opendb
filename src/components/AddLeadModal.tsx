@@ -7,6 +7,7 @@ interface POC {
   name: string
   email: string
   emailFName: string
+  personalEmail: string
   phoneNumber: string
   tags: string
   position: string
@@ -42,6 +43,8 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
   // POC form fields
   const [pocName, setPocName] = useState('')
   const [pocEmail, setPocEmail] = useState('')
+  const [pocPersonalEmail, setPocPersonalEmail] = useState('')
+  const [pocPersonalEmailNA, setPocPersonalEmailNA] = useState(false)
   const [pocPhone, setPocPhone] = useState('')
   const [pocPosition, setPocPosition] = useState('')
   const [pocTags, setPocTags] = useState('')
@@ -66,6 +69,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
       name: pocName.trim(),
       email: pocEmail.trim(),
       emailFName: pocEmailFName.trim() || deriveFName(pocName),
+      personalEmail: pocPersonalEmailNA ? '' : pocPersonalEmail.trim(),
       phoneNumber: pocPhone.trim(),
       position: pocPosition.trim(),
       tags: pocTags,
@@ -76,6 +80,8 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
     // Reset POC form
     setPocName('')
     setPocEmail('')
+    setPocPersonalEmail('')
+    setPocPersonalEmailNA(false)
     setPocPhone('')
     setPocPosition('')
     setPocTags('')
@@ -116,6 +122,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
             name: p.name,
             email: p.email,
             emailFName: p.emailFName,
+            personalEmail: p.personalEmail,
             phoneNumber: p.phoneNumber,
             position: p.position,
             tags: p.tags,
@@ -581,7 +588,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                     color: 'var(--text)',
                     marginBottom: '6px',
                   }}>
-                    Email <span style={{ color: 'var(--error)' }}>*</span>
+                    Work Email <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
                   <input
                     type="email"
@@ -599,6 +606,49 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                       fontFamily: 'inherit',
                     }}
                     onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <label style={{
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      color: 'var(--text)',
+                    }}>
+                      Personal Email
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={pocPersonalEmailNA}
+                        onChange={e => setPocPersonalEmailNA(e.target.checked)}
+                        style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                      />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Not available</span>
+                    </label>
+                  </div>
+                  <input
+                    type="email"
+                    value={pocPersonalEmail}
+                    disabled={pocPersonalEmailNA}
+                    onChange={(e) => setPocPersonalEmail(e.target.value)}
+                    placeholder={pocPersonalEmailNA ? '' : 'personal@example.com'}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      fontSize: '14px',
+                      border: '2px solid var(--gray-300)',
+                      borderRadius: '8px',
+                      outline: 'none',
+                      background: pocPersonalEmailNA ? 'var(--gray-50)' : 'var(--surface)',
+                      color: pocPersonalEmailNA ? 'var(--text-muted)' : 'var(--text)',
+                      fontFamily: 'inherit',
+                      cursor: pocPersonalEmailNA ? 'not-allowed' : 'text',
+                      opacity: pocPersonalEmailNA ? 0.6 : 1,
+                    }}
+                    onFocus={(e) => { if (!pocPersonalEmailNA) e.target.style.borderColor = 'var(--primary)' }}
                     onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
                   />
                 </div>
@@ -714,6 +764,8 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                       setShowPocForm(false)
                       setPocName('')
                       setPocEmail('')
+                      setPocPersonalEmail('')
+                      setPocPersonalEmailNA(false)
                       setPocPhone('')
                       setPocPosition('')
                       setPocTags('')

@@ -362,6 +362,7 @@ class POCData(BaseModel):
     name: str
     email: str
     emailFName: str = ""
+    personalEmail: str = ""
     phoneNumber: str
     position: str
     tags: str
@@ -548,6 +549,7 @@ async def add_lead(request: AddLeadRequest):
                         "Name": poc.name,
                         "Email": poc.email,
                         "Email FNAME": poc.emailFName or poc.name.strip().split()[0] if poc.name.strip() else "",
+                        "Personal Email": poc.personalEmail if poc.personalEmail else "",
                         "CompanyID": [company_record_id],  # Link to company
                         "Phone Number": poc.phoneNumber if poc.phoneNumber else "",
                         "Position": poc.position,
@@ -798,6 +800,7 @@ async def get_company(company_id: str):
                     "Name": f.get("Name", ""),
                     "Email": f.get("Email", ""),
                     "Email FNAME": f.get("Email FNAME", ""),
+                    "Personal Email": f.get("Personal Email", ""),
                     "Phone Number": f.get("Phone Number", ""),
                     "Position": f.get("Position", ""),
                     "Tags": f.get("Tags", ""),
@@ -853,7 +856,7 @@ async def update_company(company_id: str, request: UpdateCompanyRequest):
             # Patch each contact
             contacts_base_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
             for contact_record_id, fields in request.contacts.items():
-                contact_fields = {k: fields[k] for k in ("Name", "Email", "Email FNAME", "Phone Number", "Position", "Tags") if k in fields}
+                contact_fields = {k: fields[k] for k in ("Name", "Email", "Email FNAME", "Personal Email", "Phone Number", "Position", "Tags") if k in fields}
                 if not contact_fields:
                     continue
                 await client.patch(
@@ -878,6 +881,7 @@ class AddContactRequest(BaseModel):
     Name: str
     Email: str = ""
     EmailFName: str = ""
+    PersonalEmail: str = ""
     PhoneNumber: str = ""
     Position: str = ""
     Tags: str = ""
@@ -921,6 +925,7 @@ async def add_contact(request: AddContactRequest):
                     "Name": request.Name,
                     "Email": request.Email,
                     "Email FNAME": fname,
+                    "Personal Email": request.PersonalEmail,
                     "Phone Number": request.PhoneNumber,
                     "Position": request.Position,
                     "Tags": request.Tags,
