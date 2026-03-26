@@ -844,6 +844,9 @@ function AddContactForm({ companyRecordId, companyId, companyWebsite, onAdded }:
     if (field === 'Name' && emailFNameLocked) {
       setEmailFName(value.trim().split(/\s+/)[0] || '')
     }
+    if (field === 'Email' && value.trim() && value !== 'NA') {
+      setPersonalEmailNA(true)
+    }
     setForm(p => ({ ...p, [field]: value }))
   }
 
@@ -865,8 +868,7 @@ function AddContactForm({ companyRecordId, companyId, companyWebsite, onAdded }:
       }
     }
     if (!emailNA && !personalEmailNA && !form['Personal Email'].trim()) {
-      setError('Personal Email is required (or mark as Not available)')
-      return
+      setPersonalEmailNA(true)
     }
     if (!phoneNumberNA && !form['Phone Number'].trim()) {
       setError('Phone Number is required (or mark as Not available)')
