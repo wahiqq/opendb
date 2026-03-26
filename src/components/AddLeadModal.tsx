@@ -82,6 +82,25 @@ function deriveFName(name: string) {
   return name.trim().split(/\s+/)[0] || ''
 }
 
+function isValidEmail(val: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim())
+}
+
+function isValidPhone(val: string) {
+  // Allow digits, spaces, dashes, parentheses, and leading +
+  return /^\+?[\d\s\-()+]+$/.test(val.trim())
+}
+
+function isValidWebsite(val: string) {
+  if (!val.trim()) return true // optional field
+  try {
+    const url = new URL(val.trim().startsWith('http') ? val.trim() : 'https://' + val.trim())
+    return url.hostname.includes('.')
+  } catch {
+    return false
+  }
+}
+
 export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLeadModalProps) {
   const [companyName, setCompanyName] = useState('')
   const [country, setCountry] = useState('')
@@ -120,6 +139,18 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
       const d = slot.draft
       if (!d.name.trim() || !d.email.trim() || !d.position.trim() || !d.tags) {
         setError('Name, Work Email, Position, and Tags are required for each POC')
+        return prev
+      }
+      if (!isValidEmail(d.email)) {
+        setError('Work Email is not a valid email address')
+        return prev
+      }
+      if (d.personalEmail.trim() && !isValidEmail(d.personalEmail)) {
+        setError('Personal Email is not a valid email address')
+        return prev
+      }
+      if (d.phoneNumber.trim() && !isValidPhone(d.phoneNumber)) {
+        setError('Phone number can only contain digits, spaces, dashes, and a leading +')
         return prev
       }
       setError('')
@@ -183,6 +214,11 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
 
     if (!companyName.trim() || (!isRemote && !country.trim()) || !companySize || !notes.trim()) {
       setError('Company Name, Country, Company Size, and Notes are required')
+      return
+    }
+
+    if (website.trim() && !isValidWebsite(website)) {
+      setError('Website must be a valid URL (e.g. https://example.com)')
       return
     }
 
@@ -636,7 +672,12 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                       <input
                         type="tel"
                         value={slot.draft.phoneNumber}
-                        onChange={(e) => updateDraft(slot.id, { phoneNumber: e.target.value })}
+                        onChange={(e) => {
+                          // Only allow digits, spaces, dashes, parentheses, +
+                          const filtered = e.target.value.replace(/[^\d\s\-()+]/g, '')
+                          updateDraft(slot.id, { phoneNumber: filtered })
+                        }}
+                        placeholder="+1 234 567 8900"
                         style={inputStyle}
                         onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
                         onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
