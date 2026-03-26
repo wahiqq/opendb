@@ -9,6 +9,7 @@ interface POC {
   emailFName: string
   personalEmail: string
   phoneNumber: string
+  linkedin: string
   tags: string
   position: string
 }
@@ -22,14 +23,20 @@ interface POCSlot {
   draft: {
     name: string
     email: string
+    emailNA: boolean
     emailFName: string
     emailFNameLocked: boolean
     personalEmail: string
     personalEmailNA: boolean
     phoneNumber: string
+    phoneNumberNA: boolean
+    linkedin: string
+    linkedinNA: boolean
     position: string
     tags: string
   }
+  // pending confirmation: 'email' | 'personalEmail' | null
+  pendingConfirm: 'email' | 'personalEmail' | null
 }
 
 interface AddLeadModalProps {
@@ -58,11 +65,15 @@ function newDraft() {
   return {
     name: '',
     email: '',
+    emailNA: false,
     emailFName: '',
     emailFNameLocked: true,
     personalEmail: '',
     personalEmailNA: false,
     phoneNumber: '',
+    phoneNumberNA: false,
+    linkedin: '',
+    linkedinNA: false,
     position: '',
     tags: '',
   }
@@ -73,7 +84,8 @@ function newSlot(): POCSlot {
   return {
     id,
     saved: false,
-    data: { id, name: '', email: '', emailFName: '', personalEmail: '', phoneNumber: '', tags: '', position: '' },
+    data: { id, name: '', email: '', emailFName: '', personalEmail: '', phoneNumber: '', linkedin: '', tags: '', position: '' },
+    pendingConfirm: null,
     draft: newDraft(),
   }
 }
@@ -92,7 +104,7 @@ function isValidPhone(val: string) {
 }
 
 function isValidWebsite(val: string) {
-  if (!val.trim()) return true // optional field
+  if (!val.trim()) return false // required field
   try {
     const url = new URL(val.trim().startsWith('http') ? val.trim() : 'https://' + val.trim())
     return url.hostname.includes('.')
@@ -101,12 +113,40 @@ function isValidWebsite(val: string) {
   }
 }
 
+function isValidLinkedIn(val: string) {
+  if (!val.trim()) return false // required field
+  try {
+    const url = new URL(val.trim().startsWith('http') ? val.trim() : 'https://' + val.trim())
+    return url.hostname.includes('.')
+  } catch {
+    return false
+  }
+}
+
+function extractDomain(websiteVal: string): string {
+  try {
+    const raw = websiteVal.trim()
+    const url = new URL(raw.startsWith('http') ? raw : 'https://' + raw)
+    return url.hostname.replace(/^www\./, '').toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+function emailMatchesDomain(email: string, domain: string): boolean {
+  if (!domain) return true // no domain to check against
+  const parts = email.trim().split('@')
+  if (parts.length !== 2) return false
+  return parts[1].toLowerCase() === domain
+}
+
 export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLeadModalProps) {
   const [companyName, setCompanyName] = useState('')
   const [country, setCountry] = useState('')
   const [state, setState] = useState('')
   const [isRemote, setIsRemote] = useState(false)
   const [website, setWebsite] = useState('')
+  const [websiteNA, setWebsiteNA] = useState(false)
   const [companySize, setCompanySize] = useState('')
   const [notes, setNotes] = useState('')
   const [slots, setSlots] = useState<POCSlot[]>([])
@@ -132,35 +172,63 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
     ))
   }
 
+  function setPendingConfirm(slotId: string, val: POCSlot['pendingConfirm']) {
+    setSlots(prev => prev.map(s => s.id === slotId ? { ...s, pendingConfirm: val } : s))
+  }
+
   function saveSlot(slotId: string) {
     setSlots(prev => {
       const slot = prev.find(s => s.id === slotId)
       if (!slot) return prev
       const d = slot.draft
-      if (!d.name.trim() || !d.email.trim() || !d.position.trim() || !d.tags) {
-        setError('Name, Work Email, Position, and Tags are required for each POC')
+      if (!d.name.trim() || !d.position.trim() || !d.tags) {
+        setError('Name, Position, and Tags are required for each POC')
         return prev
       }
-      if (!isValidEmail(d.email)) {
+      if (!d.emailNA && !d.email.trim()) {
+        setError('Work Email is required (or mark as Not available)')
+        return prev
+      }
+      if (!d.emailNA && !isValidEmail(d.email)) {
         setError('Work Email is not a valid email address')
         return prev
       }
-      if (d.personalEmail.trim() && !isValidEmail(d.personalEmail)) {
+      if (!d.emailNA && !websiteNA) {
+        const domain = extractDomain(website)
+        if (domain && !emailMatchesDomain(d.email, domain)) {
+          setError(`Work Email must belong to the company domain (@${domain})`)
+          return prev
+        }
+      }
+      if (!d.emailNA && !d.personalEmailNA && !d.personalEmail.trim()) {
+        setError('Personal Email is required (or mark as Not available)')
+        return prev
+      }
+      if (!d.emailNA && !d.personalEmailNA && !isValidEmail(d.personalEmail)) {
         setError('Personal Email is not a valid email address')
         return prev
       }
-      if (d.phoneNumber.trim() && !isValidPhone(d.phoneNumber)) {
+      if (!d.phoneNumberNA && !d.phoneNumber.trim()) {
+        setError('Phone Number is required (or mark as Not available)')
+        return prev
+      }
+      if (!d.phoneNumberNA && !isValidPhone(d.phoneNumber)) {
         setError('Phone number can only contain digits, spaces, dashes, and a leading +')
+        return prev
+      }
+      if (!d.linkedinNA && !isValidLinkedIn(d.linkedin)) {
+        setError('LinkedIn is required and must be a valid URL (or mark as Not available)')
         return prev
       }
       setError('')
       const poc: POC = {
         id: slot.id,
         name: d.name.trim(),
-        email: d.email.trim(),
+        email: d.emailNA ? 'NA' : d.email.trim(),
         emailFName: d.emailFName.trim() || deriveFName(d.name),
-        personalEmail: d.personalEmailNA ? '' : d.personalEmail.trim(),
-        phoneNumber: d.phoneNumber.trim(),
+        personalEmail: d.emailNA ? 'NA' : (d.personalEmailNA ? 'NA' : d.personalEmail.trim()),
+        phoneNumber: d.phoneNumberNA ? 'NA' : d.phoneNumber.trim(),
+        linkedin: d.linkedinNA ? 'NA' : d.linkedin.trim(),
         position: d.position.trim(),
         tags: d.tags,
       }
@@ -174,14 +242,19 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
       return {
         ...s,
         saved: false,
+        pendingConfirm: null,
         draft: {
           name: s.data.name,
-          email: s.data.email,
+          email: s.data.email === 'NA' ? '' : s.data.email,
+          emailNA: s.data.email === 'NA',
           emailFName: s.data.emailFName,
           emailFNameLocked: true,
-          personalEmail: s.data.personalEmail,
-          personalEmailNA: s.data.personalEmail === '' && s.data.name !== '', // heuristic: empty after saved = N/A
-          phoneNumber: s.data.phoneNumber,
+          personalEmail: s.data.email === 'NA' || s.data.personalEmail === 'NA' ? '' : s.data.personalEmail,
+          personalEmailNA: s.data.personalEmail === 'NA' && s.data.email !== 'NA',
+          phoneNumber: s.data.phoneNumber === 'NA' ? '' : s.data.phoneNumber,
+          phoneNumberNA: s.data.phoneNumber === 'NA',
+          linkedin: s.data.linkedin === 'NA' ? '' : s.data.linkedin,
+          linkedinNA: s.data.linkedin === 'NA',
           position: s.data.position,
           tags: s.data.tags,
         },
@@ -217,8 +290,8 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
       return
     }
 
-    if (website.trim() && !isValidWebsite(website)) {
-      setError('Website must be a valid URL (e.g. https://example.com)')
+    if (!websiteNA && !isValidWebsite(website)) {
+      setError('Website is required and must be a valid URL (e.g. https://example.com) — or mark as Not available')
       return
     }
 
@@ -252,7 +325,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
           companyName: companyName.trim(),
           country: isRemote ? 'Remote' : country.trim(),
           state: isRemote ? '' : state.trim(),
-          website: website.trim(),
+          website: websiteNA ? 'NA' : website.trim(),
           qualification: companySize,
           notes: notes.trim(),
           createdBy: currentUser.name,
@@ -262,6 +335,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
             emailFName: s.data.emailFName,
             personalEmail: s.data.personalEmail,
             phoneNumber: s.data.phoneNumber,
+            linkedin: s.data.linkedin,
             position: s.data.position,
             tags: s.data.tags,
           })),
@@ -399,16 +473,28 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
 
           {/* Website */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)', marginBottom: '8px' }}>
-              Website <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span>
-            </label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <label style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)' }}>
+                Website <span style={{ color: 'var(--error)' }}>*</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={websiteNA}
+                  onChange={e => { setWebsiteNA(e.target.checked); if (e.target.checked) setWebsite('') }}
+                  style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Not available</span>
+              </label>
+            </div>
             <input
               type="url"
               value={website}
+              disabled={websiteNA}
               onChange={(e) => setWebsite(e.target.value)}
-              placeholder="https://example.com"
-              style={{ width: '100%', padding: '12px 16px', fontSize: '15px', border: '2px solid var(--gray-300)', borderRadius: '10px', outline: 'none', background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
-              onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+              placeholder={websiteNA ? '' : 'https://example.com'}
+              style={{ width: '100%', padding: '12px 16px', fontSize: '15px', border: '2px solid var(--gray-300)', borderRadius: '10px', outline: 'none', background: websiteNA ? 'var(--gray-50)' : 'var(--surface)', color: websiteNA ? 'var(--text-muted)' : 'var(--text)', fontFamily: 'inherit', cursor: websiteNA ? 'not-allowed' : 'text', opacity: websiteNA ? 0.6 : 1 }}
+              onFocus={(e) => { if (!websiteNA) e.target.style.borderColor = 'var(--primary)' }}
               onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
             />
           </div>
@@ -607,50 +693,137 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                       </div>
                     </div>
 
-                    {/* Work Email */}
-                    <div style={{ marginBottom: '10px' }}>
-                      <label style={labelStyle}>Work Email <span style={{ color: 'var(--error)' }}>*</span></label>
-                      <input
-                        type="email"
-                        value={slot.draft.email}
-                        onChange={(e) => updateDraft(slot.id, { email: e.target.value })}
-                        style={inputStyle}
-                        onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                        onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
-                      />
-                    </div>
-
-                    {/* Personal Email */}
-                    <div style={{ marginBottom: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                        <label style={{ ...labelStyle, marginBottom: 0 }}>Personal Email</label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={slot.draft.personalEmailNA}
-                            onChange={e => updateDraft(slot.id, { personalEmailNA: e.target.checked })}
-                            style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: 'var(--primary)' }}
-                          />
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Not available</span>
-                        </label>
+                    {/* Work Email confirmation popup */}
+                    {slot.pendingConfirm === 'email' && (
+                      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px' }}>
+                        <div style={{ background: 'var(--surface)', borderRadius: '12px', maxWidth: '380px', width: '100%', padding: '24px', boxShadow: 'var(--shadow-xl)' }}>
+                          <h4 style={{ margin: '0 0 10px', fontSize: '15px', fontWeight: 700, color: 'var(--text)' }}>No Work Email?</h4>
+                          <p style={{ margin: '0 0 20px', fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            I confirm that this POC does not have a work email associated.
+                          </p>
+                          <div style={{ display: 'flex', gap: '10px' }}>
+                            <button type="button" onClick={() => setPendingConfirm(slot.id, null)} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 600, border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                              Cancel
+                            </button>
+                            <button type="button" onClick={() => { updateDraft(slot.id, { emailNA: true, email: '', personalEmail: '', personalEmailNA: false }); setPendingConfirm(slot.id, null) }} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 700, border: 'none', borderRadius: '8px', background: 'var(--primary)', color: '#fff', cursor: 'pointer' }}>
+                              Accept
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                      <input
-                        type="email"
-                        value={slot.draft.personalEmail}
-                        disabled={slot.draft.personalEmailNA}
-                        onChange={(e) => updateDraft(slot.id, { personalEmail: e.target.value })}
-                        placeholder={slot.draft.personalEmailNA ? '' : 'personal@example.com'}
-                        style={{
-                          ...inputStyle,
-                          background: slot.draft.personalEmailNA ? 'var(--gray-50)' : 'var(--surface)',
-                          color: slot.draft.personalEmailNA ? 'var(--text-muted)' : 'var(--text)',
-                          cursor: slot.draft.personalEmailNA ? 'not-allowed' : 'text',
-                          opacity: slot.draft.personalEmailNA ? 0.6 : 1,
-                        }}
-                        onFocus={(e) => { if (!slot.draft.personalEmailNA) e.target.style.borderColor = 'var(--primary)' }}
-                        onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
-                      />
-                    </div>
+                    )}
+
+                    {/* Personal Email confirmation popup */}
+                    {slot.pendingConfirm === 'personalEmail' && (
+                      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px' }}>
+                        <div style={{ background: 'var(--surface)', borderRadius: '12px', maxWidth: '380px', width: '100%', padding: '24px', boxShadow: 'var(--shadow-xl)' }}>
+                          <h4 style={{ margin: '0 0 10px', fontSize: '15px', fontWeight: 700, color: 'var(--text)' }}>No Personal Email?</h4>
+                          <p style={{ margin: '0 0 20px', fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            I confirm that this POC does not have a personal email associated.
+                          </p>
+                          <div style={{ display: 'flex', gap: '10px' }}>
+                            <button type="button" onClick={() => setPendingConfirm(slot.id, null)} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 600, border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                              Cancel
+                            </button>
+                            <button type="button" onClick={() => { updateDraft(slot.id, { personalEmailNA: true, personalEmail: '' }); setPendingConfirm(slot.id, null) }} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 700, border: 'none', borderRadius: '8px', background: 'var(--primary)', color: '#fff', cursor: 'pointer' }}>
+                              Accept
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Work Email */}
+                    {(() => {
+                      const websiteNeeded = !websiteNA && !isValidWebsite(website)
+                      const emailDisabled = slot.draft.emailNA || websiteNeeded
+                      const domain = (!websiteNA && isValidWebsite(website)) ? extractDomain(website) : ''
+                      const emailDomainWarn = !slot.draft.emailNA && !websiteNeeded && domain && slot.draft.email && isValidEmail(slot.draft.email) && !emailMatchesDomain(slot.draft.email, domain)
+                      return (
+                        <div style={{ marginBottom: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <label style={{ ...labelStyle, marginBottom: 0 }}>Work Email <span style={{ color: 'var(--error)' }}>*</span></label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: websiteNeeded ? 'not-allowed' : 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={slot.draft.emailNA}
+                                disabled={websiteNeeded}
+                                onChange={e => {
+                                  if (e.target.checked) setPendingConfirm(slot.id, 'email')
+                                  else updateDraft(slot.id, { emailNA: false, personalEmail: '', personalEmailNA: false })
+                                }}
+                                style={{ width: '13px', height: '13px', cursor: websiteNeeded ? 'not-allowed' : 'pointer', accentColor: 'var(--primary)' }}
+                              />
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Not available</span>
+                            </label>
+                          </div>
+                          <input
+                            type="email"
+                            value={slot.draft.email}
+                            disabled={emailDisabled}
+                            onChange={(e) => updateDraft(slot.id, { email: e.target.value })}
+                            placeholder={websiteNeeded ? '' : (slot.draft.emailNA ? '' : (domain ? `someone@${domain}` : 'work@company.com'))}
+                            style={{
+                              ...inputStyle,
+                              background: emailDisabled ? 'var(--gray-50)' : 'var(--surface)',
+                              color: emailDisabled ? 'var(--text-muted)' : 'var(--text)',
+                              cursor: emailDisabled ? 'not-allowed' : 'text',
+                              opacity: emailDisabled ? 0.6 : 1,
+                              borderColor: emailDomainWarn ? 'var(--error)' : undefined,
+                            }}
+                            onFocus={(e) => { if (!emailDisabled) e.target.style.borderColor = emailDomainWarn ? 'var(--error)' : 'var(--primary)' }}
+                            onBlur={(e) => e.target.style.borderColor = emailDomainWarn ? 'var(--error)' : 'var(--gray-300)'}
+                          />
+                          {websiteNeeded && (
+                            <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                              Please enter the website first
+                            </p>
+                          )}
+                          {emailDomainWarn && (
+                            <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: 'var(--error-text)' }}>
+                              Email must belong to @{domain}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })()}
+
+                    {/* Personal Email — only shown once work email is marked NA */}
+                    {slot.draft.emailNA && (
+                      <div style={{ marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <label style={{ ...labelStyle, marginBottom: 0 }}>Personal Email <span style={{ color: 'var(--error)' }}>*</span></label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={slot.draft.personalEmailNA}
+                              onChange={e => {
+                                if (e.target.checked) setPendingConfirm(slot.id, 'personalEmail')
+                                else updateDraft(slot.id, { personalEmailNA: false, personalEmail: '' })
+                              }}
+                              style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                            />
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Not available</span>
+                          </label>
+                        </div>
+                        <input
+                          type="email"
+                          value={slot.draft.personalEmail}
+                          disabled={slot.draft.personalEmailNA}
+                          onChange={(e) => updateDraft(slot.id, { personalEmail: e.target.value })}
+                          placeholder={slot.draft.personalEmailNA ? '' : 'personal@example.com'}
+                          style={{
+                            ...inputStyle,
+                            background: slot.draft.personalEmailNA ? 'var(--gray-50)' : 'var(--surface)',
+                            color: slot.draft.personalEmailNA ? 'var(--text-muted)' : 'var(--text)',
+                            cursor: slot.draft.personalEmailNA ? 'not-allowed' : 'text',
+                            opacity: slot.draft.personalEmailNA ? 0.6 : 1,
+                          }}
+                          onFocus={(e) => { if (!slot.draft.personalEmailNA) e.target.style.borderColor = 'var(--primary)' }}
+                          onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
+                        />
+                      </div>
+                    )}
 
                     {/* Position */}
                     <div style={{ marginBottom: '10px' }}>
@@ -668,18 +841,67 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
 
                     {/* Phone */}
                     <div style={{ marginBottom: '10px' }}>
-                      <label style={labelStyle}>Phone Number (Optional)</label>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <label style={{ ...labelStyle, marginBottom: 0 }}>Phone Number <span style={{ color: 'var(--error)' }}>*</span></label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={slot.draft.phoneNumberNA}
+                            onChange={e => updateDraft(slot.id, { phoneNumberNA: e.target.checked, phoneNumber: '' })}
+                            style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                          />
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Not available</span>
+                        </label>
+                      </div>
                       <input
                         type="tel"
                         value={slot.draft.phoneNumber}
+                        disabled={slot.draft.phoneNumberNA}
                         onChange={(e) => {
-                          // Only allow digits, spaces, dashes, parentheses, +
                           const filtered = e.target.value.replace(/[^\d\s\-()+]/g, '')
                           updateDraft(slot.id, { phoneNumber: filtered })
                         }}
-                        placeholder="+1 234 567 8900"
-                        style={inputStyle}
-                        onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                        placeholder={slot.draft.phoneNumberNA ? '' : '+1 234 567 8900'}
+                        style={{
+                          ...inputStyle,
+                          background: slot.draft.phoneNumberNA ? 'var(--gray-50)' : 'var(--surface)',
+                          color: slot.draft.phoneNumberNA ? 'var(--text-muted)' : 'var(--text)',
+                          cursor: slot.draft.phoneNumberNA ? 'not-allowed' : 'text',
+                          opacity: slot.draft.phoneNumberNA ? 0.6 : 1,
+                        }}
+                        onFocus={(e) => { if (!slot.draft.phoneNumberNA) e.target.style.borderColor = 'var(--primary)' }}
+                        onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
+                      />
+                    </div>
+
+                    {/* LinkedIn */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <label style={{ ...labelStyle, marginBottom: 0 }}>LinkedIn <span style={{ color: 'var(--error)' }}>*</span></label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={slot.draft.linkedinNA}
+                            onChange={e => updateDraft(slot.id, { linkedinNA: e.target.checked, linkedin: '' })}
+                            style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                          />
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Not available</span>
+                        </label>
+                      </div>
+                      <input
+                        type="url"
+                        value={slot.draft.linkedin}
+                        disabled={slot.draft.linkedinNA}
+                        onChange={(e) => updateDraft(slot.id, { linkedin: e.target.value })}
+                        placeholder={slot.draft.linkedinNA ? '' : 'https://linkedin.com/in/username'}
+                        style={{
+                          ...inputStyle,
+                          background: slot.draft.linkedinNA ? 'var(--gray-50)' : 'var(--surface)',
+                          color: slot.draft.linkedinNA ? 'var(--text-muted)' : 'var(--text)',
+                          cursor: slot.draft.linkedinNA ? 'not-allowed' : 'text',
+                          opacity: slot.draft.linkedinNA ? 0.6 : 1,
+                        }}
+                        onFocus={(e) => { if (!slot.draft.linkedinNA) e.target.style.borderColor = 'var(--primary)' }}
                         onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
                       />
                     </div>

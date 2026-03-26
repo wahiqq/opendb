@@ -363,7 +363,8 @@ class POCData(BaseModel):
     email: str
     emailFName: str = ""
     personalEmail: str = ""
-    phoneNumber: str
+    phoneNumber: str = ""
+    linkedin: str = ""
     position: str
     tags: str
 
@@ -451,6 +452,33 @@ async def add_lead(request: AddLeadRequest):
     Add a new company and associated contacts to the Lead Collection database.
     Auto-generates Company ID and links contacts to the company.
     """
+    # Server-side mandatory field validation
+    if not request.companyName.strip():
+        return JSONResponse({"error": "Company Name is required"}, status_code=422)
+    if not request.country.strip():
+        return JSONResponse({"error": "Country is required"}, status_code=422)
+    if not request.qualification.strip():
+        return JSONResponse({"error": "Company Size / Qualification is required"}, status_code=422)
+    if not request.notes.strip():
+        return JSONResponse({"error": "Notes is required"}, status_code=422)
+    if not request.website.strip():
+        return JSONResponse({"error": "Website is required (or mark as Not available)"}, status_code=422)
+    for i, poc in enumerate(request.pocs, 1):
+        prefix = f"POC #{i}"
+        if not poc.name.strip():
+            return JSONResponse({"error": f"{prefix}: Name is required"}, status_code=422)
+        if not poc.position.strip():
+            return JSONResponse({"error": f"{prefix}: Position is required"}, status_code=422)
+        if not poc.tags.strip():
+            return JSONResponse({"error": f"{prefix}: Tags is required"}, status_code=422)
+        if not poc.email.strip():
+            return JSONResponse({"error": f"{prefix}: Work Email is required (or mark as Not available)"}, status_code=422)
+        if poc.email != "NA" and not poc.personalEmail.strip():
+            return JSONResponse({"error": f"{prefix}: Personal Email is required (or mark as Not available)"}, status_code=422)
+        if not poc.phoneNumber.strip():
+            return JSONResponse({"error": f"{prefix}: Phone Number is required (or mark as Not available)"}, status_code=422)
+        if not poc.linkedin.strip():
+            return JSONResponse({"error": f"{prefix}: LinkedIn is required (or mark as Not available)"}, status_code=422)
     try:
         async with httpx.AsyncClient() as client:
             headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
@@ -548,10 +576,11 @@ async def add_lead(request: AddLeadRequest):
                         "ContactID": contact_id,
                         "Name": poc.name,
                         "Email": poc.email,
-                        "Email FNAME": poc.emailFName or poc.name.strip().split()[0] if poc.name.strip() else "",
+                        "Email FNAME": poc.emailFName or (poc.name.strip().split()[0] if poc.name.strip() else ""),
                         "Personal Email": poc.personalEmail if poc.personalEmail else "",
                         "CompanyID": [company_record_id],  # Link to company
                         "Phone Number": poc.phoneNumber if poc.phoneNumber else "",
+                        "LinkedIn": poc.linkedin if poc.linkedin else "",
                         "Position": poc.position,
                         "Tags": poc.tags,
                     }
@@ -856,7 +885,7 @@ async def update_company(company_id: str, request: UpdateCompanyRequest):
             # Patch each contact
             contacts_base_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
             for contact_record_id, fields in request.contacts.items():
-                contact_fields = {k: fields[k] for k in ("Name", "Email", "Email FNAME", "Personal Email", "Phone Number", "Position", "Tags") if k in fields}
+                contact_fields = {k: fields[k] for k in ("Name", "Email", "Email FNAME", "Personal Email", "Phone Number", "LinkedIn", "Position", "Tags") if k in fields}
                 if not contact_fields:
                     continue
                 await client.patch(
@@ -883,6 +912,7 @@ class AddContactRequest(BaseModel):
     EmailFName: str = ""
     PersonalEmail: str = ""
     PhoneNumber: str = ""
+    LinkedIn: str = ""
     Position: str = ""
     Tags: str = ""
 
@@ -890,6 +920,21 @@ class AddContactRequest(BaseModel):
 @app.post("/api/contact")
 async def add_contact(request: AddContactRequest):
     """Add a single contact linked to an existing company."""
+    # Server-side mandatory field validation
+    if not request.Name.strip():
+        return JSONResponse({"error": "Name is required"}, status_code=422)
+    if not request.Position.strip():
+        return JSONResponse({"error": "Position is required"}, status_code=422)
+    if not request.Tags.strip():
+        return JSONResponse({"error": "Tags is required"}, status_code=422)
+    if not request.Email.strip():
+        return JSONResponse({"error": "Work Email is required (or mark as Not available)"}, status_code=422)
+    if request.Email != "NA" and not request.PersonalEmail.strip():
+        return JSONResponse({"error": "Personal Email is required (or mark as Not available)"}, status_code=422)
+    if not request.PhoneNumber.strip():
+        return JSONResponse({"error": "Phone Number is required (or mark as Not available)"}, status_code=422)
+    if not request.LinkedIn.strip():
+        return JSONResponse({"error": "LinkedIn is required (or mark as Not available)"}, status_code=422)
     try:
         async with httpx.AsyncClient() as client:
             headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
@@ -927,6 +972,7 @@ async def add_contact(request: AddContactRequest):
                     "Email FNAME": fname,
                     "Personal Email": request.PersonalEmail,
                     "Phone Number": request.PhoneNumber,
+                    "LinkedIn": request.LinkedIn,
                     "Position": request.Position,
                     "Tags": request.Tags,
                     "CompanyID": [request.companyRecordId],

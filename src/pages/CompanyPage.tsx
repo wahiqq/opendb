@@ -23,6 +23,7 @@ interface Contact {
   'Email FNAME': string
   'Personal Email': string
   'Phone Number': string
+  LinkedIn: string
   Position: string
   Tags: string
 }
@@ -34,6 +35,27 @@ const QUALIFICATION_OPTIONS = [
 ]
 
 const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool']
+
+function extractDomain(websiteVal: string): string {
+  try {
+    const raw = websiteVal.trim()
+    const url = new URL(raw.startsWith('http') ? raw : 'https://' + raw)
+    return url.hostname.replace(/^www\./, '').toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+function emailMatchesDomain(email: string, domain: string): boolean {
+  if (!domain) return true
+  const parts = email.trim().split('@')
+  if (parts.length !== 2) return false
+  return parts[1].toLowerCase() === domain
+}
+
+function isValidEmail(val: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim())
+}
 
 // ─── Read-only Field ──────────────────────────────────────────────────────────
 
@@ -363,25 +385,53 @@ interface ContactCardProps {
   contact: Contact
   index: number
   companyId: string
+  companyWebsite: string
   onSaveField: (contactId: string, field: keyof Contact, value: string) => Promise<void>
   onDelete: (contactId: string) => Promise<void>
 }
 
-function ContactCard({ contact, index, onSaveField, onDelete }: ContactCardProps) {
+function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: ContactCardProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState({ ...contact })
   const [emailFNameLocked, setEmailFNameLocked] = useState(true)
+  const [emailNA, setEmailNA] = useState(contact.Email === 'NA')
+  const [personalEmailNA, setPersonalEmailNA] = useState(contact['Personal Email'] === 'NA')
+  const [phoneNumberNA, setPhoneNumberNA] = useState(contact['Phone Number'] === 'NA')
+  const [linkedinNA, setLinkedinNA] = useState(contact.LinkedIn === 'NA')
+  const [pendingConfirm, setPendingConfirm] = useState<'email' | 'personalEmail' | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   async function handleSave() {
+    if (!draft.Name.trim()) { setError('Name is required'); return }
+    if (!draft.Position.trim()) { setError('Position is required'); return }
+    if (!draft.Tags) { setError('Tags is required'); return }
+    if (!emailNA && !draft.Email.trim()) { setError('Work Email is required (or mark as N/A)'); return }
+    if (!emailNA && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.Email.trim())) { setError('Work Email is not a valid email address'); return }
+    if (!emailNA && !personalEmailNA && !(draft['Personal Email'] || '').trim()) { setError('Personal Email is required (or mark as N/A)'); return }
+    if (!emailNA && !personalEmailNA && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((draft['Personal Email'] || '').trim())) { setError('Personal Email is not a valid email address'); return }
+    if (!phoneNumberNA && !draft['Phone Number'].trim()) { setError('Phone Number is required (or mark as N/A)'); return }
+    if (!linkedinNA && !draft.LinkedIn.trim()) { setError('LinkedIn is required (or mark as N/A)'); return }
+    if (!emailNA && companyWebsite && companyWebsite !== 'NA') {
+      const domain = extractDomain(companyWebsite)
+      if (domain && draft.Email && !emailMatchesDomain(draft.Email, domain)) {
+        setError(`Work Email must belong to the company domain (@${domain})`)
+        return
+      }
+    }
     setSaving(true)
     setError('')
     try {
-      const resolved = { ...draft, 'Personal Email': draft['Personal Email'] === '__NA__' ? '' : (draft['Personal Email'] || '') }
-      for (const field of ['Name', 'Email', 'Email FNAME', 'Personal Email', 'Phone Number', 'Position', 'Tags'] as (keyof Contact)[]) {
+      const resolved = {
+        ...draft,
+        Email: emailNA ? 'NA' : draft.Email,
+        'Personal Email': emailNA ? 'NA' : (personalEmailNA ? 'NA' : (draft['Personal Email'] || '')),
+        'Phone Number': phoneNumberNA ? 'NA' : draft['Phone Number'],
+        LinkedIn: linkedinNA ? 'NA' : draft.LinkedIn,
+      }
+      for (const field of ['Name', 'Email', 'Email FNAME', 'Personal Email', 'Phone Number', 'LinkedIn', 'Position', 'Tags'] as (keyof Contact)[]) {
         if (resolved[field] !== contact[field]) {
           await onSaveField(contact.id, field, resolved[field] as string)
         }
@@ -396,6 +446,11 @@ function ContactCard({ contact, index, onSaveField, onDelete }: ContactCardProps
 
   function handleCancel() {
     setDraft({ ...contact })
+    setEmailNA(contact.Email === 'NA')
+    setPersonalEmailNA(contact['Personal Email'] === 'NA')
+    setPhoneNumberNA(contact['Phone Number'] === 'NA')
+    setLinkedinNA(contact.LinkedIn === 'NA')
+    setPendingConfirm(null)
     setEditing(false)
     setEmailFNameLocked(true)
     setError('')
@@ -511,41 +566,87 @@ function ContactCard({ contact, index, onSaveField, onDelete }: ContactCardProps
                 </button>
               </div>
             </div>
-            <div>
-              <label style={labelStyle}>Work Email</label>
-              <input type="text" value={draft.Email} onChange={e => setDraft(p => ({ ...p, Email: e.target.value }))} style={inputStyle} onFocus={e => e.target.style.borderColor = 'var(--primary)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-            </div>
-            <div>
+            {/* Work Email confirmation popup */}
+            {pendingConfirm === 'email' && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px' }}>
+                <div style={{ background: 'var(--surface)', borderRadius: '12px', maxWidth: '380px', width: '100%', padding: '24px', boxShadow: 'var(--shadow-xl)' }}>
+                  <h4 style={{ margin: '0 0 10px', fontSize: '15px', fontWeight: 700, color: 'var(--text)' }}>No Work Email?</h4>
+                  <p style={{ margin: '0 0 20px', fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.5 }}>I confirm that this contact does not have a work email associated.</p>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button type="button" onClick={() => setPendingConfirm(null)} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 600, border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-muted)' }}>Cancel</button>
+                    <button type="button" onClick={() => { setEmailNA(true); setDraft(p => ({ ...p, Email: '' })); setPersonalEmailNA(false); setDraft(p => ({ ...p, 'Personal Email': '' })); setPendingConfirm(null) }} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 700, border: 'none', borderRadius: '8px', background: 'var(--primary)', color: '#fff', cursor: 'pointer' }}>Accept</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Personal Email confirmation popup */}
+            {pendingConfirm === 'personalEmail' && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px' }}>
+                <div style={{ background: 'var(--surface)', borderRadius: '12px', maxWidth: '380px', width: '100%', padding: '24px', boxShadow: 'var(--shadow-xl)' }}>
+                  <h4 style={{ margin: '0 0 10px', fontSize: '15px', fontWeight: 700, color: 'var(--text)' }}>No Personal Email?</h4>
+                  <p style={{ margin: '0 0 20px', fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.5 }}>I confirm that this contact does not have a personal email associated.</p>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button type="button" onClick={() => setPendingConfirm(null)} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 600, border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-muted)' }}>Cancel</button>
+                    <button type="button" onClick={() => { setPersonalEmailNA(true); setDraft(p => ({ ...p, 'Personal Email': '' })); setPendingConfirm(null) }} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 700, border: 'none', borderRadius: '8px', background: 'var(--primary)', color: '#fff', cursor: 'pointer' }}>Accept</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div style={{ gridColumn: '1 / -1' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <label style={{ ...labelStyle, marginBottom: 0 }}>Personal Email</label>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>Work Email</label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={draft['Personal Email'] === '__NA__'}
-                    onChange={e => setDraft(p => ({ ...p, 'Personal Email': e.target.checked ? '__NA__' : '' }))}
-                    style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }}
-                  />
+                  <input type="checkbox" checked={emailNA} onChange={e => { if (e.target.checked) setPendingConfirm('email'); else { setEmailNA(false); setPersonalEmailNA(false) } }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
                   <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
                 </label>
               </div>
-              <input
-                type="text"
-                value={draft['Personal Email'] === '__NA__' ? '' : (draft['Personal Email'] || '')}
-                disabled={draft['Personal Email'] === '__NA__'}
-                onChange={e => setDraft(p => ({ ...p, 'Personal Email': e.target.value }))}
-                placeholder={draft['Personal Email'] === '__NA__' ? '' : 'personal@example.com'}
-                style={{ ...inputStyle, background: draft['Personal Email'] === '__NA__' ? 'var(--gray-50)' : 'var(--surface)', color: draft['Personal Email'] === '__NA__' ? 'var(--text-muted)' : 'var(--text)', cursor: draft['Personal Email'] === '__NA__' ? 'not-allowed' : 'text', opacity: draft['Personal Email'] === '__NA__' ? 0.6 : 1 }}
-                onFocus={e => { if (draft['Personal Email'] !== '__NA__') e.target.style.borderColor = 'var(--primary)' }}
-                onBlur={e => e.target.style.borderColor = 'var(--border)'}
-              />
+              {(() => {
+                const domain = companyWebsite && companyWebsite !== 'NA' ? extractDomain(companyWebsite) : ''
+                const emailVal = emailNA ? '' : draft.Email
+                const emailDomainWarn = !emailNA && domain && emailVal && isValidEmail(emailVal) && !emailMatchesDomain(emailVal, domain)
+                return (
+                  <>
+                    <input type="text" value={emailVal} disabled={emailNA} onChange={e => setDraft(p => ({ ...p, Email: e.target.value }))} placeholder={emailNA ? '' : (domain ? `someone@${domain}` : 'work@company.com')} style={{ ...inputStyle, background: emailNA ? 'var(--gray-50)' : 'var(--surface)', color: emailNA ? 'var(--text-muted)' : 'var(--text)', cursor: emailNA ? 'not-allowed' : 'text', opacity: emailNA ? 0.6 : 1, borderColor: emailDomainWarn ? 'var(--error)' : undefined }} onFocus={e => { if (!emailNA) e.target.style.borderColor = emailDomainWarn ? 'var(--error)' : 'var(--primary)' }} onBlur={e => e.target.style.borderColor = emailDomainWarn ? 'var(--error)' : 'var(--border)'} />
+                    {emailDomainWarn && <p style={{ margin: '3px 0 0', fontSize: '11px', color: 'var(--error-text)' }}>Email must belong to @{domain}</p>}
+                  </>
+                )
+              })()}
             </div>
+            {emailNA && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <label style={{ ...labelStyle, marginBottom: 0 }}>Personal Email</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={personalEmailNA} onChange={e => { if (e.target.checked) setPendingConfirm('personalEmail'); else { setPersonalEmailNA(false); setDraft(p => ({ ...p, 'Personal Email': '' })) } }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
+                  </label>
+                </div>
+                <input type="text" value={personalEmailNA ? '' : (draft['Personal Email'] || '')} disabled={personalEmailNA} onChange={e => setDraft(p => ({ ...p, 'Personal Email': e.target.value }))} placeholder={personalEmailNA ? '' : 'personal@example.com'} style={{ ...inputStyle, background: personalEmailNA ? 'var(--gray-50)' : 'var(--surface)', color: personalEmailNA ? 'var(--text-muted)' : 'var(--text)', cursor: personalEmailNA ? 'not-allowed' : 'text', opacity: personalEmailNA ? 0.6 : 1 }} onFocus={e => { if (!personalEmailNA) e.target.style.borderColor = 'var(--primary)' }} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+              </div>
+            )}
             <div>
-              <label style={labelStyle}>Phone Number</label>
-              <input type="text" value={draft['Phone Number']} onChange={e => setDraft(p => ({ ...p, 'Phone Number': e.target.value }))} style={inputStyle} onFocus={e => e.target.style.borderColor = 'var(--primary)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>Phone Number *</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={phoneNumberNA} onChange={e => { setPhoneNumberNA(e.target.checked); if (e.target.checked) setDraft(p => ({ ...p, 'Phone Number': '' })) }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
+                </label>
+              </div>
+              <input type="text" value={phoneNumberNA ? '' : draft['Phone Number']} disabled={phoneNumberNA} onChange={e => setDraft(p => ({ ...p, 'Phone Number': e.target.value }))} placeholder={phoneNumberNA ? '' : '+1 234 567 8900'} style={{ ...inputStyle, background: phoneNumberNA ? 'var(--gray-50)' : 'var(--surface)', color: phoneNumberNA ? 'var(--text-muted)' : 'var(--text)', cursor: phoneNumberNA ? 'not-allowed' : 'text', opacity: phoneNumberNA ? 0.6 : 1 }} onFocus={e => { if (!phoneNumberNA) e.target.style.borderColor = 'var(--primary)' }} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
             </div>
             <div>
               <label style={labelStyle}>Position</label>
               <input type="text" value={draft.Position} onChange={e => setDraft(p => ({ ...p, Position: e.target.value }))} style={inputStyle} onFocus={e => e.target.style.borderColor = 'var(--primary)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>LinkedIn *</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={linkedinNA} onChange={e => { setLinkedinNA(e.target.checked); if (e.target.checked) setDraft(p => ({ ...p, LinkedIn: '' })) }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
+                </label>
+              </div>
+              <input type="url" value={linkedinNA ? '' : (draft.LinkedIn || '')} disabled={linkedinNA} onChange={e => setDraft(p => ({ ...p, LinkedIn: e.target.value }))} placeholder={linkedinNA ? '' : 'https://linkedin.com/in/username'} style={{ ...inputStyle, background: linkedinNA ? 'var(--gray-50)' : 'var(--surface)', color: linkedinNA ? 'var(--text-muted)' : 'var(--text)', cursor: linkedinNA ? 'not-allowed' : 'text', opacity: linkedinNA ? 0.6 : 1 }} onFocus={e => { if (!linkedinNA) e.target.style.borderColor = 'var(--primary)' }} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
             </div>
             <div>
               <TagSelectField value={draft.Tags} onChange={v => setDraft(p => ({ ...p, Tags: v }))} />
@@ -564,12 +665,14 @@ function ContactCard({ contact, index, onSaveField, onDelete }: ContactCardProps
           </div>
           <div>
             <span style={labelStyle}>Work Email</span>
-            <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: contact.Email ? 'var(--text)' : 'var(--text-muted)' }}>{contact.Email || '—'}</p>
+            <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: contact.Email && contact.Email !== 'NA' ? 'var(--text)' : 'var(--text-muted)' }}>
+              {contact.Email === 'NA' ? <span style={{ fontStyle: 'italic' }}>Not available</span> : (contact.Email || '—')}
+            </p>
           </div>
           <div>
             <span style={labelStyle}>Personal Email</span>
-            <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: contact['Personal Email'] ? 'var(--text)' : 'var(--text-muted)' }}>
-              {contact['Personal Email'] || <span style={{ fontStyle: 'italic' }}>Not available</span>}
+            <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: contact['Personal Email'] && contact['Personal Email'] !== 'NA' ? 'var(--text)' : 'var(--text-muted)' }}>
+              {contact['Personal Email'] === 'NA' ? <span style={{ fontStyle: 'italic' }}>Not available</span> : (contact['Personal Email'] || '—')}
             </p>
           </div>
           <div>
@@ -578,11 +681,19 @@ function ContactCard({ contact, index, onSaveField, onDelete }: ContactCardProps
           </div>
           <div>
             <span style={labelStyle}>Phone Number</span>
-            <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: contact['Phone Number'] ? 'var(--text)' : 'var(--text-muted)' }}>{contact['Phone Number'] || '—'}</p>
+            <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: contact['Phone Number'] && contact['Phone Number'] !== 'NA' ? 'var(--text)' : 'var(--text-muted)' }}>
+              {contact['Phone Number'] === 'NA' ? <span style={{ fontStyle: 'italic' }}>Not available</span> : (contact['Phone Number'] || '—')}
+            </p>
           </div>
           <div>
             <span style={labelStyle}>Position</span>
             <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: contact.Position ? 'var(--text)' : 'var(--text-muted)' }}>{contact.Position || '—'}</p>
+          </div>
+          <div>
+            <span style={labelStyle}>LinkedIn</span>
+            <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: contact.LinkedIn && contact.LinkedIn !== 'NA' ? 'var(--text)' : 'var(--text-muted)' }}>
+              {contact.LinkedIn === 'NA' ? <span style={{ fontStyle: 'italic' }}>Not available</span> : (contact.LinkedIn || '—')}
+            </p>
           </div>
           <div>
             <span style={labelStyle}>Tags</span>
@@ -604,14 +715,19 @@ interface NewContact {
   Email: string
   'Personal Email': string
   'Phone Number': string
+  LinkedIn: string
   Position: string
   Tags: string
 }
 
-function AddContactForm({ companyRecordId, companyId, onAdded }: { companyRecordId: string; companyId: string; onAdded: () => void }) {
+function AddContactForm({ companyRecordId, companyId, companyWebsite, onAdded }: { companyRecordId: string; companyId: string; companyWebsite: string; onAdded: () => void }) {
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState<NewContact>({ Name: '', Email: '', 'Personal Email': '', 'Phone Number': '', Position: '', Tags: '' })
+  const [form, setForm] = useState<NewContact>({ Name: '', Email: '', 'Personal Email': '', 'Phone Number': '', LinkedIn: '', Position: '', Tags: '' })
+  const [emailNA, setEmailNA] = useState(false)
   const [personalEmailNA, setPersonalEmailNA] = useState(false)
+  const [phoneNumberNA, setPhoneNumberNA] = useState(false)
+  const [linkedinNA, setLinkedinNA] = useState(false)
+  const [pendingConfirm, setPendingConfirm] = useState<'email' | 'personalEmail' | null>(null)
   const [emailFName, setEmailFName] = useState('')
   const [emailFNameLocked, setEmailFNameLocked] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -625,8 +741,31 @@ function AddContactForm({ companyRecordId, companyId, onAdded }: { companyRecord
   }
 
   async function handleAdd() {
-    if (!form.Name.trim() || !form.Email.trim() || !form.Position.trim() || !form.Tags) {
-      setError('Name, Email, Position, and Tags are required')
+    if (!form.Name.trim() || !form.Position.trim() || !form.Tags) {
+      setError('Name, Position, and Tags are required')
+      return
+    }
+    if (!emailNA && !form.Email.trim()) {
+      setError('Work Email is required (or mark as Not available)')
+      return
+    }
+    if (!emailNA && companyWebsite && companyWebsite !== 'NA') {
+      const domain = extractDomain(companyWebsite)
+      if (domain && !emailMatchesDomain(form.Email, domain)) {
+        setError(`Work Email must belong to the company domain (@${domain})`)
+        return
+      }
+    }
+    if (!emailNA && !personalEmailNA && !form['Personal Email'].trim()) {
+      setError('Personal Email is required (or mark as Not available)')
+      return
+    }
+    if (!phoneNumberNA && !form['Phone Number'].trim()) {
+      setError('Phone Number is required (or mark as Not available)')
+      return
+    }
+    if (!linkedinNA && !form.LinkedIn.trim()) {
+      setError('LinkedIn is required (or mark as Not available)')
       return
     }
     setSaving(true)
@@ -635,12 +774,16 @@ function AddContactForm({ companyRecordId, companyId, onAdded }: { companyRecord
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyRecordId, companyId, Name: form.Name, Email: form.Email, EmailFName: emailFName || form.Name.trim().split(/\s+/)[0] || '', PersonalEmail: personalEmailNA ? '' : form['Personal Email'], PhoneNumber: form['Phone Number'], Position: form.Position, Tags: form.Tags }),
+        body: JSON.stringify({ companyRecordId, companyId, Name: form.Name, Email: emailNA ? 'NA' : form.Email, EmailFName: emailFName || form.Name.trim().split(/\s+/)[0] || '', PersonalEmail: emailNA ? 'NA' : (personalEmailNA ? 'NA' : form['Personal Email']), PhoneNumber: phoneNumberNA ? 'NA' : form['Phone Number'], LinkedIn: linkedinNA ? 'NA' : form.LinkedIn, Position: form.Position, Tags: form.Tags }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to add contact')
-      setForm({ Name: '', Email: '', 'Personal Email': '', 'Phone Number': '', Position: '', Tags: '' })
+      setForm({ Name: '', Email: '', 'Personal Email': '', 'Phone Number': '', LinkedIn: '', Position: '', Tags: '' })
+      setEmailNA(false)
       setPersonalEmailNA(false)
+      setPhoneNumberNA(false)
+      setLinkedinNA(false)
+      setPendingConfirm(null)
       setEmailFName('')
       setEmailFNameLocked(true)
       setOpen(false)
@@ -710,37 +853,83 @@ function AddContactForm({ companyRecordId, companyId, onAdded }: { companyRecord
             </button>
           </div>
         </div>
-        <div>
-          <label style={labelStyle}>Work Email *</label>
-          <input type="text" value={form.Email} onChange={e => update('Email', e.target.value)} style={inputStyle} onFocus={e => e.target.style.borderColor = 'var(--primary)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-        </div>
-        <div>
+        {/* Work Email confirmation popup */}
+        {pendingConfirm === 'email' && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px' }}>
+            <div style={{ background: 'var(--surface)', borderRadius: '12px', maxWidth: '380px', width: '100%', padding: '24px', boxShadow: 'var(--shadow-xl)' }}>
+              <h4 style={{ margin: '0 0 10px', fontSize: '15px', fontWeight: 700, color: 'var(--text)' }}>No Work Email?</h4>
+              <p style={{ margin: '0 0 20px', fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.5 }}>I confirm that this contact does not have a work email associated.</p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" onClick={() => setPendingConfirm(null)} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 600, border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-muted)' }}>Cancel</button>
+                <button type="button" onClick={() => { setEmailNA(true); update('Email', ''); setPersonalEmailNA(false); update('Personal Email', ''); setPendingConfirm(null) }} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 700, border: 'none', borderRadius: '8px', background: 'var(--primary)', color: '#fff', cursor: 'pointer' }}>Accept</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Personal Email confirmation popup */}
+        {pendingConfirm === 'personalEmail' && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px' }}>
+            <div style={{ background: 'var(--surface)', borderRadius: '12px', maxWidth: '380px', width: '100%', padding: '24px', boxShadow: 'var(--shadow-xl)' }}>
+              <h4 style={{ margin: '0 0 10px', fontSize: '15px', fontWeight: 700, color: 'var(--text)' }}>No Personal Email?</h4>
+              <p style={{ margin: '0 0 20px', fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.5 }}>I confirm that this contact does not have a personal email associated.</p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" onClick={() => setPendingConfirm(null)} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 600, border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-muted)' }}>Cancel</button>
+                <button type="button" onClick={() => { setPersonalEmailNA(true); update('Personal Email', ''); setPendingConfirm(null) }} style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: 700, border: 'none', borderRadius: '8px', background: 'var(--primary)', color: '#fff', cursor: 'pointer' }}>Accept</button>
+              </div>
+            </div>
+          </div>
+        )}
+        <div style={{ gridColumn: '1 / -1' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <label style={{ ...labelStyle, marginBottom: 0 }}>Personal Email</label>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Work Email *</label>
             <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={personalEmailNA}
-                onChange={e => setPersonalEmailNA(e.target.checked)}
-                style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }}
-              />
+              <input type="checkbox" checked={emailNA} onChange={e => { if (e.target.checked) setPendingConfirm('email'); else { setEmailNA(false); setPersonalEmailNA(false) } }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
               <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
             </label>
           </div>
-          <input
-            type="text"
-            value={personalEmailNA ? '' : form['Personal Email']}
-            disabled={personalEmailNA}
-            onChange={e => update('Personal Email', e.target.value)}
-            placeholder={personalEmailNA ? '' : 'personal@example.com'}
-            style={{ ...inputStyle, background: personalEmailNA ? 'var(--gray-50)' : 'var(--surface)', color: personalEmailNA ? 'var(--text-muted)' : 'var(--text)', cursor: personalEmailNA ? 'not-allowed' : 'text', opacity: personalEmailNA ? 0.6 : 1 }}
-            onFocus={e => { if (!personalEmailNA) e.target.style.borderColor = 'var(--primary)' }}
-            onBlur={e => e.target.style.borderColor = 'var(--border)'}
-          />
+          {(() => {
+            const domain = companyWebsite && companyWebsite !== 'NA' ? extractDomain(companyWebsite) : ''
+            const emailVal = emailNA ? '' : form.Email
+            const emailDomainWarn = !emailNA && domain && emailVal && isValidEmail(emailVal) && !emailMatchesDomain(emailVal, domain)
+            return (
+              <>
+                <input type="text" value={emailVal} disabled={emailNA} onChange={e => update('Email', e.target.value)} placeholder={emailNA ? '' : (domain ? `someone@${domain}` : 'work@company.com')} style={{ ...inputStyle, background: emailNA ? 'var(--gray-50)' : 'var(--surface)', color: emailNA ? 'var(--text-muted)' : 'var(--text)', cursor: emailNA ? 'not-allowed' : 'text', opacity: emailNA ? 0.6 : 1, borderColor: emailDomainWarn ? 'var(--error)' : undefined }} onFocus={e => { if (!emailNA) e.target.style.borderColor = emailDomainWarn ? 'var(--error)' : 'var(--primary)' }} onBlur={e => e.target.style.borderColor = emailDomainWarn ? 'var(--error)' : 'var(--border)'} />
+                {emailDomainWarn && <p style={{ margin: '3px 0 0', fontSize: '11px', color: 'var(--error-text)' }}>Email must belong to @{domain}</p>}
+              </>
+            )
+          })()}
+        </div>
+        {emailNA && (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Personal Email *</label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={personalEmailNA} onChange={e => { if (e.target.checked) setPendingConfirm('personalEmail'); else { setPersonalEmailNA(false); update('Personal Email', '') } }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
+              </label>
+            </div>
+            <input type="text" value={personalEmailNA ? '' : form['Personal Email']} disabled={personalEmailNA} onChange={e => update('Personal Email', e.target.value)} placeholder={personalEmailNA ? '' : 'personal@example.com'} style={{ ...inputStyle, background: personalEmailNA ? 'var(--gray-50)' : 'var(--surface)', color: personalEmailNA ? 'var(--text-muted)' : 'var(--text)', cursor: personalEmailNA ? 'not-allowed' : 'text', opacity: personalEmailNA ? 0.6 : 1 }} onFocus={e => { if (!personalEmailNA) e.target.style.borderColor = 'var(--primary)' }} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+          </div>
+        )}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Phone Number *</label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={phoneNumberNA} onChange={e => { setPhoneNumberNA(e.target.checked); if (e.target.checked) update('Phone Number', '') }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
+            </label>
+          </div>
+          <input type="text" value={phoneNumberNA ? '' : form['Phone Number']} disabled={phoneNumberNA} onChange={e => update('Phone Number', e.target.value)} placeholder={phoneNumberNA ? '' : '+1 234 567 8900'} style={{ ...inputStyle, background: phoneNumberNA ? 'var(--gray-50)' : 'var(--surface)', color: phoneNumberNA ? 'var(--text-muted)' : 'var(--text)', cursor: phoneNumberNA ? 'not-allowed' : 'text', opacity: phoneNumberNA ? 0.6 : 1 }} onFocus={e => { if (!phoneNumberNA) e.target.style.borderColor = 'var(--primary)' }} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
         </div>
         <div>
-          <label style={labelStyle}>Phone Number</label>
-          <input type="text" value={form['Phone Number']} onChange={e => update('Phone Number', e.target.value)} style={inputStyle} onFocus={e => e.target.style.borderColor = 'var(--primary)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>LinkedIn *</label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={linkedinNA} onChange={e => { setLinkedinNA(e.target.checked); if (e.target.checked) update('LinkedIn', '') }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
+            </label>
+          </div>
+          <input type="url" value={linkedinNA ? '' : form.LinkedIn} disabled={linkedinNA} onChange={e => update('LinkedIn', e.target.value)} placeholder={linkedinNA ? '' : 'https://linkedin.com/in/username'} style={{ ...inputStyle, background: linkedinNA ? 'var(--gray-50)' : 'var(--surface)', color: linkedinNA ? 'var(--text-muted)' : 'var(--text)', cursor: linkedinNA ? 'not-allowed' : 'text', opacity: linkedinNA ? 0.6 : 1 }} onFocus={e => { if (!linkedinNA) e.target.style.borderColor = 'var(--primary)' }} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
         </div>
         <div>
           <label style={labelStyle}>Position *</label>
@@ -755,7 +944,7 @@ function AddContactForm({ companyRecordId, companyId, onAdded }: { companyRecord
         <button onClick={handleAdd} disabled={saving} style={{ padding: '6px 16px', fontSize: '13px', fontWeight: 600, background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '6px', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
           {saving ? 'Adding…' : 'Add Contact'}
         </button>
-        <button onClick={() => { setOpen(false); setError(''); setEmailFName(''); setEmailFNameLocked(true); setPersonalEmailNA(false) }} style={{ padding: '6px 12px', fontSize: '13px', fontWeight: 600, background: 'none', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
+        <button onClick={() => { setOpen(false); setError(''); setEmailFName(''); setEmailFNameLocked(true); setEmailNA(false); setPersonalEmailNA(false); setPhoneNumberNA(false); setLinkedinNA(false); setPendingConfirm(null) }} style={{ padding: '6px 12px', fontSize: '13px', fontWeight: 600, background: 'none', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
           Cancel
         </button>
       </div>
@@ -903,6 +1092,7 @@ export default function CompanyPage() {
                 contact={contact}
                 index={i}
                 companyId={companyId!}
+                companyWebsite={company.Website || ''}
                 onSaveField={saveContactField}
                 onDelete={deleteContact}
               />
@@ -910,6 +1100,7 @@ export default function CompanyPage() {
             <AddContactForm
               companyRecordId={company.id}
               companyId={companyId!}
+              companyWebsite={company.Website || ''}
               onAdded={loadCompany}
             />
           </div>
