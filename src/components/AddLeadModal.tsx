@@ -98,6 +98,17 @@ function isValidEmail(val: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim())
 }
 
+function isValidName(val: string): string | null {
+  const trimmed = val.trim()
+  if (!trimmed) return 'Name is required'
+  if (/[^a-zA-Z .'`-]/.test(trimmed)) return 'Name can only contain letters, spaces, and full stops'
+  const words = trimmed.split(/\s+/)
+  for (const word of words) {
+    if (word && !/^[A-Z]/.test(word)) return 'Each word in the name must start with a capital letter (e.g. Wahiq Iqbal)'
+  }
+  return null
+}
+
 function isValidPhone(val: string) {
   // Allow digits, spaces, dashes, parentheses, and leading +
   return /^\+?[\d\s\-()+]+$/.test(val.trim())
@@ -181,8 +192,10 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
       const slot = prev.find(s => s.id === slotId)
       if (!slot) return prev
       const d = slot.draft
-      if (!d.name.trim() || !d.position.trim() || !d.tags) {
-        setError('Name, Position, and Tags are required for each POC')
+      const nameErr = isValidName(d.name)
+      if (nameErr) { setError(nameErr); return prev }
+      if (!d.position.trim() || !d.tags) {
+        setError('Position and Tags are required for each POC')
         return prev
       }
       if (!d.emailNA && !d.email.trim()) {

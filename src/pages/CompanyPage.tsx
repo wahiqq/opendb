@@ -57,6 +57,17 @@ function isValidEmail(val: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim())
 }
 
+function isValidName(val: string): string | null {
+  const trimmed = val.trim()
+  if (!trimmed) return 'Name is required'
+  if (/[^a-zA-Z .'`-]/.test(trimmed)) return 'Name can only contain letters, spaces, and full stops'
+  const words = trimmed.split(/\s+/)
+  for (const word of words) {
+    if (word && !/^[A-Z]/.test(word)) return 'Each word in the name must start with a capital letter (e.g. Wahiq Iqbal)'
+  }
+  return null
+}
+
 // ─── Read-only Field ──────────────────────────────────────────────────────────
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
@@ -500,7 +511,7 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
   const [deleting, setDeleting] = useState(false)
 
   async function handleSave() {
-    if (!draft.Name.trim()) { setError('Name is required'); return }
+    const nameErr = isValidName(draft.Name); if (nameErr) { setError(nameErr); return }
     if (!draft.Position.trim()) { setError('Position is required'); return }
     if (!draft.Tags) { setError('Tags is required'); return }
     if (!emailNA && !draft.Email.trim()) { setError('Work Email is required (or mark as N/A)'); return }
@@ -836,8 +847,9 @@ function AddContactForm({ companyRecordId, companyId, companyWebsite, onAdded }:
   }
 
   async function handleAdd() {
-    if (!form.Name.trim() || !form.Position.trim() || !form.Tags) {
-      setError('Name, Position, and Tags are required')
+    const nameErr = isValidName(form.Name); if (nameErr) { setError(nameErr); return }
+    if (!form.Position.trim() || !form.Tags) {
+      setError('Position and Tags are required')
       return
     }
     if (!emailNA && !form.Email.trim()) {
