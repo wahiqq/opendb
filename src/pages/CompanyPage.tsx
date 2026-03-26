@@ -827,6 +827,7 @@ interface NewContact {
 }
 
 function AddContactForm({ companyRecordId, companyId, companyWebsite, onAdded }: { companyRecordId: string; companyId: string; companyWebsite: string; onAdded: () => void }) {
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('riseUser') || '{}') } catch { return {} } })()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<NewContact>({ Name: '', Email: '', 'Personal Email': '', 'Phone Number': '', LinkedIn: '', Position: '', Tags: '' })
   const [emailNA, setEmailNA] = useState(false)
@@ -881,7 +882,7 @@ function AddContactForm({ companyRecordId, companyId, companyWebsite, onAdded }:
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyRecordId, companyId, Name: form.Name, Email: emailNA ? 'NA' : form.Email, EmailFName: emailFName || form.Name.trim().split(/\s+/)[0] || '', PersonalEmail: emailNA ? 'NA' : (personalEmailNA ? 'NA' : form['Personal Email']), PhoneNumber: phoneNumberNA ? 'NA' : form['Phone Number'], LinkedIn: linkedinNA ? 'NA' : form.LinkedIn, Position: form.Position, Tags: form.Tags }),
+        body: JSON.stringify({ companyRecordId, companyId, Name: form.Name, Email: emailNA ? 'NA' : form.Email, EmailFName: emailFName || form.Name.trim().split(/\s+/)[0] || '', PersonalEmail: emailNA ? 'NA' : (personalEmailNA ? 'NA' : form['Personal Email']), PhoneNumber: phoneNumberNA ? 'NA' : form['Phone Number'], LinkedIn: linkedinNA ? 'NA' : form.LinkedIn, Position: form.Position, Tags: form.Tags, createdBy: currentUser.name || '' }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to add contact')

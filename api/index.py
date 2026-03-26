@@ -915,6 +915,7 @@ class AddContactRequest(BaseModel):
     LinkedIn: str = ""
     Position: str = ""
     Tags: str = ""
+    createdBy: str = ""
 
 
 @app.post("/api/contact")
@@ -976,6 +977,7 @@ async def add_contact(request: AddContactRequest):
                     "Position": request.Position,
                     "Tags": request.Tags,
                     "CompanyID": [request.companyRecordId],
+                    **({"CreatedBy": request.createdBy} if request.createdBy else {}),
                 }
             }
 
