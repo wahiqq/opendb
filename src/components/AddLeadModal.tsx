@@ -32,6 +32,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
   const [companyName, setCompanyName] = useState('')
   const [country, setCountry] = useState('')
   const [state, setState] = useState('')
+  const [isRemote, setIsRemote] = useState(false)
   const [website, setWebsite] = useState('')
   const [qualification, setQualification] = useState('')
   const [notes, setNotes] = useState('')
@@ -92,7 +93,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
     e.preventDefault()
     setError('')
 
-    if (!companyName.trim() || !country.trim() || !qualification || !notes.trim()) {
+    if (!companyName.trim() || (!isRemote && !country.trim()) || !qualification || !notes.trim()) {
       setError('Company Name, Country, Qualification, and Notes are required')
       return
     }
@@ -105,8 +106,8 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           companyName: companyName.trim(),
-          country: country.trim(),
-          state: state.trim(),
+          country: isRemote ? 'Remote' : country.trim(),
+          state: isRemote ? '' : state.trim(),
           website: website.trim(),
           qualification: qualification,
           notes: notes.trim(),
@@ -218,44 +219,58 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
-            <div>
-              <label style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 700,
-                color: 'var(--text)',
-                marginBottom: '8px',
-              }}>
-                Country <span style={{ color: 'var(--error)' }}>*</span>
-              </label>
-              <CountrySelect
-                value={country}
-                onChange={(val) => {
-                  setCountry(val)
-                  setState('') // reset state when country changes
-                }}
-                required
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', width: 'fit-content' }}>
+              <input
+                type="checkbox"
+                checked={isRemote}
+                onChange={e => setIsRemote(e.target.checked)}
+                style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: 'var(--primary)' }}
               />
-            </div>
-
-            <div>
-              <label style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 700,
-                color: 'var(--text)',
-                marginBottom: '8px',
-              }}>
-                State {country === 'United States' ? <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span> : <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span>}
-              </label>
-              <StateField
-                country={country}
-                value={state}
-                onChange={setState}
-              />
-            </div>
+              <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-muted)' }}>Remote company</span>
+            </label>
           </div>
+
+          {!isRemote && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.875rem',
+                  fontWeight: 700,
+                  color: 'var(--text)',
+                  marginBottom: '8px',
+                }}>
+                  Country <span style={{ color: 'var(--error)' }}>*</span>
+                </label>
+                <CountrySelect
+                  value={country}
+                  onChange={(val) => {
+                    setCountry(val)
+                    setState('')
+                  }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.875rem',
+                  fontWeight: 700,
+                  color: 'var(--text)',
+                  marginBottom: '8px',
+                }}>
+                  State <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span>
+                </label>
+                <StateField
+                  country={country}
+                  value={state}
+                  onChange={setState}
+                />
+              </div>
+            </div>
+          )}
 
           <div style={{ marginBottom: '20px' }}>
             <label style={{
