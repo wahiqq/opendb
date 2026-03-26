@@ -67,17 +67,26 @@ export default function DeleteListGenerator() {
       <div className="steps">
         <div className={`step ${step >= 1 ? (step > 1 ? 'done' : 'active') : ''}`}>
           <div className="step-num">{step > 1 ? <IconCheck style={{ width: 14, height: 14 }} /> : '1'}</div>
-          <div className="step-label">Upload Files</div>
+          <div className="step-info">
+            <div className="step-label">Upload Files</div>
+            <div className="step-sublabel">CSV dump files</div>
+          </div>
         </div>
         <div className="step-connector" />
         <div className={`step ${step >= 2 ? (step > 2 ? 'done' : 'active') : ''}`}>
           <div className="step-num">{step > 2 ? <IconCheck style={{ width: 14, height: 14 }} /> : '2'}</div>
-          <div className="step-label">Process</div>
+          <div className="step-info">
+            <div className="step-label">Analyse</div>
+            <div className="step-sublabel">Detect inactive emails</div>
+          </div>
         </div>
         <div className="step-connector" />
         <div className={`step ${step >= 3 ? 'active' : ''}`}>
           <div className="step-num">3</div>
-          <div className="step-label">Download</div>
+          <div className="step-info">
+            <div className="step-label">Download</div>
+            <div className="step-sublabel">Save delete list</div>
+          </div>
         </div>
       </div>
 

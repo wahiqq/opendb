@@ -67,11 +67,40 @@ export default function DuplicateFinder() {
 
   const headers = result?.rows[0] ? Object.keys(result.rows[0]) : []
 
+  const step = loading ? 2 : result ? 3 : 1
+
   return (
     <Layout
       title="Duplicate Email Finder"
       description="Scan one or more CSV files to find duplicate contacts by email, company, or name."
     >
+      {/* Step indicator */}
+      <div className="steps">
+        <div className={`step ${step > 1 ? 'done' : 'active'}`}>
+          <div className="step-num">{step > 1 ? <IconCheck style={{ width: 14, height: 14 }} /> : '1'}</div>
+          <div className="step-info">
+            <div className="step-label">Configure</div>
+            <div className="step-sublabel">Choose dedup type &amp; upload</div>
+          </div>
+        </div>
+        <div className="step-connector" />
+        <div className={`step ${step === 2 ? 'active' : step > 2 ? 'done' : ''}`}>
+          <div className="step-num">{step > 2 ? <IconCheck style={{ width: 14, height: 14 }} /> : '2'}</div>
+          <div className="step-info">
+            <div className="step-label">Scan</div>
+            <div className="step-sublabel">Find duplicate entries</div>
+          </div>
+        </div>
+        <div className="step-connector" />
+        <div className={`step ${step === 3 ? 'active' : ''}`}>
+          <div className="step-num">3</div>
+          <div className="step-info">
+            <div className="step-label">Download</div>
+            <div className="step-sublabel">Export duplicate report</div>
+          </div>
+        </div>
+      </div>
+
       {/* How it works */}
       <div className="card">
         <p className="card-title">How It Works</p>

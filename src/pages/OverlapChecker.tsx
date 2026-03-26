@@ -56,90 +56,106 @@ export default function OverlapChecker() {
       description="Remove overlapping emails between two CSV files and download the clean remaining list."
     >
       {/* Info strip */}
-      <div className="info-strip">
-        <span className="info-strip-icon"><IconInfo /></span>
-        <div>
-          <strong>How it works:</strong> Upload two CSVs with an <code>email</code> column.
-          Emails found in <strong>CSV 2</strong> are removed from <strong>CSV 1</strong>.
-          The clean, non-overlapping list is yours to download immediately.
+      <div className="card" style={{ marginBottom: 0 }}>
+        <p className="card-title">How It Works</p>
+        <div className="info-strip">
+          <span className="info-strip-icon"><IconInfo /></span>
+          <div>
+            Upload two CSVs — each must have an <code>email</code> column.
+            Emails found in <strong>CSV 2</strong> are subtracted from <strong>CSV 1</strong>.
+            Download the clean, non-overlapping list instantly.
+          </div>
         </div>
       </div>
 
       {/* Step indicator */}
       <div className="steps">
-        <div className={`step ${file1 && file2 ? 'done' : 'active'}`}>
+        <div className={`step ${result || loading ? 'done' : 'active'}`}>
           <div className="step-num">1</div>
-          <div className="step-label">Upload CSVs</div>
+          <div className="step-info">
+            <div className="step-label">Upload CSVs</div>
+            <div className="step-sublabel">Two files required</div>
+          </div>
         </div>
         <div className="step-connector" />
         <div className={`step ${loading ? 'active' : result ? 'done' : ''}`}>
           <div className="step-num">2</div>
-          <div className="step-label">Process</div>
+          <div className="step-info">
+            <div className="step-label">Check Overlap</div>
+            <div className="step-sublabel">Compare email lists</div>
+          </div>
         </div>
         <div className="step-connector" />
         <div className={`step ${result ? 'active' : ''}`}>
           <div className="step-num">3</div>
-          <div className="step-label">Download</div>
+          <div className="step-info">
+            <div className="step-label">Download</div>
+            <div className="step-sublabel">Save filtered CSV</div>
+          </div>
         </div>
       </div>
 
       {/* Upload section */}
-      <div className="upload-pair">
-        <div className="upload-col">
-          <p className="upload-col-label">
-            <IconLayers />
-            <span>CSV 1 — Main List</span>
-          </p>
-          <p className="upload-col-hint">The list you want to filter</p>
-          <UploadZone
-            label="Upload CSV 1"
-            description="Main email list"
-            onFiles={([f]) => setFile1(f ?? null)}
-          />
+      <div className="card">
+        <p className="card-title">Upload Files</p>
+        <div className="upload-pair">
+          <div className="upload-col">
+            <p className="upload-col-label">
+              <IconLayers />
+              <span>CSV 1 — Main List</span>
+            </p>
+            <p className="upload-col-hint">The list you want to filter</p>
+            <UploadZone
+              label="Upload CSV 1"
+              description="Main email list"
+              onFiles={([f]) => setFile1(f ?? null)}
+            />
+          </div>
+          <div className="upload-col-divider">
+            <span>minus</span>
+          </div>
+          <div className="upload-col">
+            <p className="upload-col-label">
+              <IconLayers />
+              <span>CSV 2 — Overlap List</span>
+            </p>
+            <p className="upload-col-hint">Emails to remove from CSV 1</p>
+            <UploadZone
+              label="Upload CSV 2"
+              description="Emails to subtract"
+              onFiles={([f]) => setFile2(f ?? null)}
+            />
+          </div>
         </div>
-        <div className="upload-col-divider">
-          <span>minus</span>
-        </div>
-        <div className="upload-col">
-          <p className="upload-col-label">
-            <IconLayers />
-            <span>CSV 2 — Overlap List</span>
-          </p>
-          <p className="upload-col-hint">Emails to remove from CSV 1</p>
-          <UploadZone
-            label="Upload CSV 2"
-            description="Emails to subtract"
-            onFiles={([f]) => setFile2(f ?? null)}
-          />
-        </div>
-      </div>
 
-      {error && (
-        <div className="alert alert-error">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
+        {error && (
+          <div className="alert alert-error">
+            <strong>Error:</strong> {error}
+          </div>
+        )}
 
-      <div style={{ textAlign: 'center', marginTop: 8 }}>
-        <button
-          className="btn btn-primary btn-lg"
-          onClick={handleProcess}
-          disabled={loading}
-        >
-          {loading ? (
-            <>
-              <span className="spinner" />
-              Checking overlap…
-            </>
-          ) : (
-            'Check Overlap'
-          )}
-        </button>
+        <div className="btn-group">
+          <button
+            className="btn btn-primary btn-lg"
+            onClick={handleProcess}
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <span className="spinner" />
+                Checking overlap…
+              </>
+            ) : (
+              'Check Overlap'
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Results */}
       {result && (
-        <div className="result-section">
+        <div className="card" style={{ marginTop: 4 }}>
+          <p className="card-title">Results</p>
           {/* Venn diagram */}
           <div className="overlap-visual">
             <div className="overlap-circle overlap-circle-1">
@@ -177,25 +193,23 @@ export default function OverlapChecker() {
           </div>
 
           {result.remaining_count > 0 ? (
-            <>
-              <div className="result-banner">
-                <div className="result-banner-text">
-                  <strong>{result.remaining_count.toLocaleString()}</strong> emails remaining
-                  after removing <strong>{result.overlap_count.toLocaleString()}</strong> overlaps
-                </div>
-                <button
-                  className="btn btn-outline-green"
-                  onClick={() =>
-                    downloadCSV('overlap_filtered.csv', emailsToRecords(result.emails))
-                  }
-                >
-                  <IconDownload />
-                  Download Filtered List
-                </button>
+            <div className="result-banner">
+              <div className="result-banner-text">
+                <strong>{result.remaining_count.toLocaleString()}</strong> emails remaining
+                after removing <strong>{result.overlap_count.toLocaleString()}</strong> overlaps
               </div>
-            </>
+              <button
+                className="btn btn-outline-green"
+                onClick={() =>
+                  downloadCSV('overlap_filtered.csv', emailsToRecords(result.emails))
+                }
+              >
+                <IconDownload />
+                Download Filtered List
+              </button>
+            </div>
           ) : (
-            <div className="alert alert-info" style={{ marginTop: 24 }}>
+            <div className="alert alert-info" style={{ marginTop: 0 }}>
               All emails from CSV 1 were found in CSV 2 — nothing remains after filtering.
             </div>
           )}
