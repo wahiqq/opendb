@@ -248,27 +248,32 @@ export default function SearchDashboard() {
                           >
                             <polyline points="6 9 12 15 18 9" />
                           </svg>
+                          <span
+                            onClick={e => { e.stopPropagation(); navigate(`/company/${company.CompanyID}`) }}
+                            title="View company page"
+                            style={{
+                              flexShrink: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '28px',
+                              height: '28px',
+                              background: 'var(--primary-bg)',
+                              border: '1px solid var(--primary-light)',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              color: 'var(--primary)',
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
+                              <polyline points="9 18 15 12 9 6" />
+                            </svg>
+                          </span>
                         </button>
 
                         {/* Expanded details */}
                         {isExpanded && (
                           <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--border)' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '14px', color: 'var(--text-muted)', paddingTop: '16px' }}>
-                              {company.Country && (
-                                <div><strong style={{ color: 'var(--text)' }}>Country:</strong> {company.Country}</div>
-                              )}
-                              {company.State && (
-                                <div><strong style={{ color: 'var(--text)' }}>State:</strong> {company.State}</div>
-                              )}
-                              {company.CreatedBy && (
-                                <div><strong style={{ color: 'var(--text)' }}>Created By:</strong> {company.CreatedBy}</div>
-                              )}
-                            </div>
-                            {company.Notes && (
-                              <div style={{ marginTop: '12px', padding: '12px', background: 'var(--gray-50)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px', color: 'var(--text-muted)' }}>
-                                <strong style={{ color: 'var(--text)' }}>Notes:</strong> {company.Notes}
-                              </div>
-                            )}
                             {linkedContacts.length > 0 && (
                               <div style={{ marginTop: '16px' }}>
                                 <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
@@ -285,7 +290,6 @@ export default function SearchDashboard() {
                                         <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{contact.ContactID}</span>
                                       </div>
                                       <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--text-muted)' }}>
-                                        {contact.Email && <span>{contact.Email}</span>}
                                         {contact['Phone Number'] && <span>{contact['Phone Number']}</span>}
                                         {contact.Tags && (
                                           <span style={{ padding: '1px 8px', background: 'var(--primary-bg)', color: 'var(--primary)', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>
@@ -355,18 +359,6 @@ export default function SearchDashboard() {
                             {group.company.CompanyID}
                           </span>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                          {group.company.Country && (
-                            <div>
-                              <strong style={{ color: 'var(--text)' }}>Country:</strong> {group.company.Country}
-                            </div>
-                          )}
-                          {group.company.State && (
-                            <div>
-                              <strong style={{ color: 'var(--text)' }}>State:</strong> {group.company.State}
-                            </div>
-                          )}
-                        </div>
                       </div>
                     ) : (
                       <div style={{
@@ -419,11 +411,6 @@ export default function SearchDashboard() {
                             </span>
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '13px', color: 'var(--text-muted)' }}>
-                            {contact.Email && (
-                              <div>
-                                <strong style={{ color: 'var(--text)' }}>Email:</strong> {contact.Email}
-                              </div>
-                            )}
                             {contact['Phone Number'] && (
                               <div>
                                 <strong style={{ color: 'var(--text)' }}>Phone:</strong> {contact['Phone Number']}

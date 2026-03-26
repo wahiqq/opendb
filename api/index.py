@@ -361,6 +361,7 @@ class LoginRequest(BaseModel):
 class POCData(BaseModel):
     name: str
     email: str
+    emailFName: str = ""
     phoneNumber: str
     position: str
     tags: str
@@ -544,6 +545,7 @@ async def add_lead(request: AddLeadRequest):
                         "ContactID": contact_id,
                         "Name": poc.name,
                         "Email": poc.email,
+                        "Email FNAME": poc.emailFName or poc.name.strip().split()[0] if poc.name.strip() else "",
                         "CompanyID": [company_record_id],  # Link to company
                         "Phone Number": poc.phoneNumber if poc.phoneNumber else "",
                         "Position": poc.position,
@@ -727,3 +729,231 @@ async def search_leads(q: str = Query(..., min_length=1)):
             {"error": f"Search failed: {str(e)}"},
             status_code=500
         )
+
+
+# ---------------------------------------------------------------------------
+# Company Detail + Edit
+# ---------------------------------------------------------------------------
+
+@app.get("/api/company/{company_id}")
+async def get_company(company_id: str):
+    """Fetch a single company and its contacts by CompanyID (e.g. COMP0042)."""
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
+
+            # Look up company by CompanyID field
+            companies_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{COMPANY_TABLE_ID}"
+            res = await client.get(companies_url, headers=headers, params={
+                "filterByFormula": f"{{CompanyID}}='{company_id}'",
+                "maxRecords": 1,
+            })
+            data = res.json()
+            records = data.get("records", [])
+            if not records:
+                return JSONResponse({"error": "Company not found"}, status_code=404)
+
+            record = records[0]
+            record_id = record["id"]
+            fields = record.get("fields", {})
+            company = {
+                "id": record_id,
+                "CompanyID": fields.get("CompanyID", ""),
+                "Company Name": fields.get("Company Name", ""),
+                "Country": fields.get("Country", ""),
+                "State": fields.get("State", ""),
+                "CreatedBy": fields.get("CreatedBy", ""),
+                "Notes": fields.get("Notes", ""),
+                "Qualification": fields.get("Qualification", ""),
+            }
+
+            # Fetch contacts linked to this company
+            # CompanyID is a linked record field — filter in Python by record ID
+            contacts_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
+            all_contacts = []
+            offset = None
+            while True:
+                params: Dict = {}
+                if offset:
+                    params["offset"] = offset
+                contacts_res = await client.get(contacts_url, headers=headers, params=params)
+                contacts_data = contacts_res.json()
+                for rec in contacts_data.get("records", []):
+                    linked = rec.get("fields", {}).get("CompanyID", [])
+                    if record_id in linked:
+                        all_contacts.append(rec)
+                offset = contacts_data.get("offset")
+                if not offset:
+                    break
+
+            contacts = []
+            for rec in all_contacts:
+                f = rec.get("fields", {})
+                contacts.append({
+                    "id": rec["id"],
+                    "ContactID": f.get("ContactID", ""),
+                    "Name": f.get("Name", ""),
+                    "Email": f.get("Email", ""),
+                    "Email FNAME": f.get("Email FNAME", ""),
+                    "Phone Number": f.get("Phone Number", ""),
+                    "Position": f.get("Position", ""),
+                    "Tags": f.get("Tags", ""),
+                })
+
+            return JSONResponse({"company": company, "contacts": contacts})
+
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+class UpdateCompanyRequest(BaseModel):
+    company: Dict
+    contacts: Dict  # airtable record_id -> fields dict
+
+
+@app.patch("/api/company/{company_id}")
+async def update_company(company_id: str, request: UpdateCompanyRequest):
+    """Update company fields and any changed contact fields. Looks up by CompanyID."""
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
+
+            # Look up the Airtable record ID from CompanyID
+            companies_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{COMPANY_TABLE_ID}"
+            lookup_res = await client.get(companies_url, headers=headers, params={
+                "filterByFormula": f"{{CompanyID}}='{company_id}'",
+                "maxRecords": 1,
+                "fields[]": "CompanyID",
+            })
+            lookup_data = lookup_res.json()
+            records = lookup_data.get("records", [])
+            if not records:
+                return JSONResponse({"error": "Company not found"}, status_code=404)
+
+            record_id = records[0]["id"]
+
+            # Patch company
+            c = request.company
+            company_fields = {k: c[k] for k in ("Company Name", "Country", "State", "CreatedBy", "Notes", "Qualification") if k in c}
+            patch_res = await client.patch(
+                f"{companies_url}/{record_id}",
+                headers=headers,
+                json={"fields": company_fields},
+            )
+            if patch_res.status_code != 200:
+                data = patch_res.json()
+                return JSONResponse(
+                    {"error": data.get("error", {}).get("message", "Failed to update company")},
+                    status_code=patch_res.status_code,
+                )
+
+            # Patch each contact
+            contacts_base_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
+            for contact_record_id, fields in request.contacts.items():
+                contact_fields = {k: fields[k] for k in ("Name", "Email", "Email FNAME", "Phone Number", "Position", "Tags") if k in fields}
+                if not contact_fields:
+                    continue
+                await client.patch(
+                    f"{contacts_base_url}/{contact_record_id}",
+                    headers=headers,
+                    json={"fields": contact_fields},
+                )
+
+            return JSONResponse({"success": True})
+
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# Add / Delete Contact
+# ---------------------------------------------------------------------------
+
+class AddContactRequest(BaseModel):
+    companyRecordId: str   # Airtable record ID of the company
+    companyId: str         # e.g. COMP0042 — used to generate ContactID
+    Name: str
+    Email: str = ""
+    EmailFName: str = ""
+    PhoneNumber: str = ""
+    Position: str = ""
+    Tags: str = ""
+
+
+@app.post("/api/contact")
+async def add_contact(request: AddContactRequest):
+    """Add a single contact linked to an existing company."""
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
+            contacts_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
+
+            # Determine next ContactID
+            existing_ids = []
+            offset = None
+            while True:
+                params: Dict = {"fields[]": "ContactID"}
+                if offset:
+                    params["offset"] = offset
+                res = await client.get(contacts_url, headers=headers, params=params)
+                data = res.json()
+                for rec in data.get("records", []):
+                    cid = rec.get("fields", {}).get("ContactID", "")
+                    if cid and cid.startswith("CON"):
+                        try:
+                            existing_ids.append(int(cid.replace("CON", "")))
+                        except ValueError:
+                            pass
+                offset = data.get("offset")
+                if not offset:
+                    break
+
+            next_id = max(existing_ids, default=0) + 1
+            contact_id = f"CON{next_id:04d}"
+
+            fname = request.EmailFName or (request.Name.strip().split()[0] if request.Name.strip() else "")
+            payload = {
+                "fields": {
+                    "ContactID": contact_id,
+                    "Name": request.Name,
+                    "Email": request.Email,
+                    "Email FNAME": fname,
+                    "Phone Number": request.PhoneNumber,
+                    "Position": request.Position,
+                    "Tags": request.Tags,
+                    "CompanyID": [request.companyRecordId],
+                }
+            }
+
+            create_res = await client.post(contacts_url, headers=headers, json=payload)
+            create_data = create_res.json()
+            if create_res.status_code != 200:
+                return JSONResponse(
+                    {"error": create_data.get("error", {}).get("message", "Failed to create contact")},
+                    status_code=create_res.status_code,
+                )
+
+            return JSONResponse({"success": True, "id": create_data["id"], "ContactID": contact_id})
+
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.delete("/api/contact/{record_id}")
+async def delete_contact(record_id: str):
+    """Delete a contact record by Airtable record ID."""
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
+            url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}/{record_id}"
+            res = await client.delete(url, headers=headers)
+            if res.status_code not in (200, 204):
+                data = res.json()
+                return JSONResponse(
+                    {"error": data.get("error", {}).get("message", "Failed to delete contact")},
+                    status_code=res.status_code,
+                )
+            return JSONResponse({"success": True})
+
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
