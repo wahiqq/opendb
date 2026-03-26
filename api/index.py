@@ -593,7 +593,7 @@ async def add_lead(request: AddLeadRequest):
 # ---------------------------------------------------------------------------
 
 @app.get("/api/search-leads")
-async def search_leads(q: str = Query(..., min_length=1)):
+async def search_leads(q: str = Query(default="")):
     """
     Search companies and contacts in the Lead Collection Airtable base.
     Searches by company name, email, contact ID, and company ID.
