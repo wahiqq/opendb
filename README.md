@@ -1,218 +1,586 @@
-# RISE - Email Data Tools
+# RISE Research — Lead Management Platform
 
-A FastAPI application for processing email data dumps. Now includes three features:
-- **Delete List Generator**: Identify emails to delete based on engagement metrics.
-- **Duplicate Email Finder**: Find duplicate emails across multiple CSVs.
-- **Gmail Lead Analyzer**: Analyze Gmail leads directly from the dashboard.
-
-## **Quick Start - How to Run**
-### **1. Install Required Packages**
-```powershell
-pip install -r requirements.txt
-```
-
-### **2. Setup Static Files**
-```powershell
-mkdir static
-move app.html static\
-move duplicate.html static\
-move dashboard.html static\
-move logo.png static\
-```
-
-### **3. Start the Server**
-```powershell
-uvicorn app:app --reload
-```
-
-**Quick Summary:**
-- The app now supports three tools from the homepage:
-   - **Delete List Generator**: Upload CSVs with Email/Opens columns to generate `delete_list.csv` (emails in 3+ dumps with 0 opens).
-   - **Duplicate Email Finder**: Upload CSVs with email/name/company columns to generate `duplicate_emails.csv` (all duplicate emails, grouped).
-   - **Gmail Lead Analyzer**: Direct link to analyze Gmail leads: [Gmail Lead Analyzer](https://riseglobaleducation.com/).
+A full-stack web application for B2D (Business Development) research, lead collection, and email data management. Built for the RISE Research team to capture company and contact data, search and edit records, and clean email lists using built-in utility tools.
 
 ---
 
-## How to Run
+## Table of Contents
 
-1. Install required packages:
-```powershell
-pip install -r requirements.txt
-```
-
-2. Setup static files folder:
-```powershell
-mkdir static
-move app.html static\
-move homepage.html static\
-```
-
-3. Start the server:
-```powershell
-uvicorn app:app --reload
-```
-
-4. Open in your browser:
-   - Dashboard: http://localhost:8000/ (choose a tool)
-   - Delete List Generator: http://localhost:8000/app
-   - Duplicate Email Finder: http://localhost:8000/static/duplicate.html
-   - Gmail Lead Analyzer: [https://riseglobaleducation.com/](https://riseglobaleducation.com/)
-   - API docs (optional): http://localhost:8000/docs
+- [Overview](#overview)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Running the App](#running-the-app)
+- [Pages & Features](#pages--features)
+- [Database Schema](#database-schema)
+- [API Reference](#api-reference)
+- [Utility Tools](#utility-tools)
+- [Input & File Format Requirements](#input--file-format-requirements)
+- [Deployment](#deployment)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
-## How to Use the App
+## Overview
 
-1. Open http://localhost:8000/ and choose a tool:
-   - **Open App**: Delete List Generator (for deletion list)
-   - **Duplicate Email Finder**: Find duplicate emails
+RISE Research is used by the BD team to:
+
+- **Collect leads** — Add companies and their points of contact (POCs) directly from the dashboard
+- **Search & edit records** — Find any company or contact and update their details
+- **Clean email lists** — Use built-in tools to remove inactive emails, find duplicates, and eliminate overlap between files
+
+All company and contact data is stored in **Airtable**. The app acts as a custom frontend and backend layer on top of Airtable's REST API.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 18 + TypeScript + Vite |
+| Routing | React Router v6 |
+| Backend | FastAPI (Python 3) + Uvicorn |
+| Database | Airtable (cloud) |
+| HTTP Client | httpx (async, for Airtable API calls) |
+| File Parsing | pandas, openpyxl, xlrd |
+| Styling | Custom CSS with CSS variables |
+| Deployment | Vercel (frontend + serverless API) |
+| Dev Runner | concurrently (runs API + Vite in one command) |
+
+---
+
+## Project Structure
+
+```
+opendb/
+├── api/
+│   └── index.py              # Main FastAPI application (all backend routes)
+├── src/
+│   ├── main.tsx              # React app entry point
+│   ├── App.tsx               # React Router setup
+│   ├── index.css             # Global styles and CSS variables
+│   ├── utils.ts              # Shared utilities (CSV download helper, etc.)
+│   ├── data/
+│   │   └── geoData.ts        # Country and state data for selectors
+│   ├── components/
+│   │   ├── Navbar.tsx        # Top navigation bar
+│   │   ├── Layout.tsx        # Page layout wrapper
+│   │   ├── AddLeadModal.tsx  # Slot-based modal for adding companies + POCs
+│   │   ├── UploadZone.tsx    # Drag-and-drop file upload component
+│   │   ├── CountryStateFields.tsx  # Country/state selector
+│   │   └── Icons.tsx         # SVG icon library
+│   └── pages/
+│       ├── Login.tsx                 # Login page
+│       ├── SearchDashboard.tsx       # Main search and lead management page
+│       ├── CompanyPage.tsx           # Company detail and edit view
+│       ├── ToolSuite.tsx             # Tool suite landing page
+│       ├── DeleteListGenerator.tsx   # Email dump cleanup tool
+│       ├── DuplicateFinder.tsx       # Duplicate email/company detection tool
+│       └── OverlapChecker.tsx        # Email overlap removal tool
+├── public/                   # Static public assets
+├── uploads/                  # Temporary server-side file storage
+├── .env                      # Environment variables (not committed)
+├── .env.example              # Environment variable template
+├── package.json              # NPM dependencies and scripts
+├── vite.config.ts            # Vite configuration (API proxy)
+├── tsconfig.json             # TypeScript configuration
+├── vercel.json               # Vercel deployment configuration
+└── requirements.txt          # Python dependencies
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Node.js** v18 or higher
+- **Python** 3.11 or higher
+- A Python virtual environment (`.venv`)
+- An Airtable account with the configured bases (see [Environment Variables](#environment-variables))
+
+### 1. Clone the repository
+
+```bash
+git clone <repo-url>
+cd opendb
+```
+
+### 2. Install frontend dependencies
+
+```bash
+npm install
+```
+
+### 3. Set up the Python virtual environment
+
+```bash
+python -m venv .venv
+```
+
+Activate it:
+
+- **Windows:** `.venv\Scripts\activate`
+- **Mac/Linux:** `source .venv/bin/activate`
+
+### 4. Install Python dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 5. Set up environment variables
+
+Copy `.env.example` to `.env` and fill in your Airtable tokens:
+
+```bash
+cp .env.example .env
+```
+
+See [Environment Variables](#environment-variables) for what each value means.
+
+---
+
+## Environment Variables
+
+Create a `.env` file in the project root with the following:
+
+```env
+AIRTABLE_WRITE_TOKEN=your_write_token_here
+AIRTABLE_READ_TOKEN=your_read_token_here
+LEAD_COLLECTION_BASE_ID=appI5BT69o10EAmY5
+CONTACTS_DATABASE_BASE_ID=appNF0vZQGLNucTck
+```
+
+| Variable | Description |
+|---|---|
+| `AIRTABLE_WRITE_TOKEN` | Airtable PAT with create/update/delete scopes |
+| `AIRTABLE_READ_TOKEN` | Airtable PAT with read-only scope |
+| `LEAD_COLLECTION_BASE_ID` | Base ID for the Companies and Contacts tables |
+| `CONTACTS_DATABASE_BASE_ID` | Base ID for the Team (authentication) table |
+
+> Never commit `.env` to git. It is already listed in `.gitignore`.
+
+---
+
+## Running the App
+
+### Development (recommended)
+
+This single command starts both the FastAPI backend (port 8000) and the Vite dev server concurrently:
+
+```bash
+npm run dev
+```
+
+The terminal will show two labeled streams:
+- `[api]` — FastAPI/Uvicorn output
+- `[web]` — Vite dev server output
+
+Open your browser at: **http://localhost:5173**
+
+The Vite dev server proxies all `/api/` requests to `http://localhost:8000`, so you don't need to worry about CORS during development.
+
+### Other scripts
+
+| Script | Description |
+|---|---|
+| `npm run dev` | Run backend + frontend in parallel |
+| `npm run build` | Build the React app for production |
+| `npm run preview` | Preview the production build locally |
+| `npm run typecheck` | Run TypeScript type checking without emitting |
+
+---
+
+## Pages & Features
+
+### Login — `/`
+
+Simple email + password login. Credentials are validated against the **Team table** in Airtable. On success, the user object is stored in `localStorage` and the user is redirected to the dashboard.
+
+No registration flow — accounts must be added directly to the Team table in Airtable.
+
+---
+
+### Search Dashboard — `/dashboard`
+
+The main working screen. Includes:
+
+- **Search bar** — Search companies and contacts by name, email, phone, or ID. Results appear as cards with the company name, country, qualification, and a list of associated contacts.
+- **Add Lead button** — Opens the AddLead modal (see below).
+- **Company cards** — Each result card shows the company's key details. Click a card to open the full company page.
+
+#### Adding a Lead (AddLead Modal)
+
+A slot-based form with two sections:
+
+**Company Details:**
+- Company Name (required)
+- Country + State (with geo selectors)
+- Website
+- Qualification: `Small`, `MSME`, or `Enterprise`
+- Notes
+
+**Points of Contact (POCs):**
+- Up to multiple POC slots, each with:
+  - Name
+  - Position
+  - Work Email (validated)
+  - Personal Email (optional)
+  - Phone Number (validated)
+  - Tags: `IECA`, `HECA`, `NACAC`, `WACAC`, `School`, `Community`, `Homeschool`
+
+On submit, the app creates a Company record and all POC records in Airtable, with contacts linked to the company via `CompanyID`.
+
+---
+
+### Company Page — `/company/:companyId`
+
+Full detail view for a single company. Shows:
+
+- All company fields (editable inline)
+- All associated contacts (editable inline)
+- Each field can be clicked to edit and saved individually
+
+---
+
+### Tool Suite — `/tool-suite`
+
+Landing page for the utility tools. Links to:
+- Delete List Generator
+- Duplicate Finder
+- Overlap Checker
+
+---
+
+## Database Schema
+
+All data is in **Airtable**. There are two bases:
+
+### Lead Collection Base (`appI5BT69o10EAmY5`)
+
+**Companies Table** (`tblPe818m70QqzOJX`)
+
+| Field | Type | Notes |
+|---|---|---|
+| CompanyID | Text | Auto-assigned (format: `COMP0001`) |
+| Company Name | Text | Required |
+| Country | Text | From geo selector |
+| State | Text | From geo selector |
+| Website | URL | |
+| Qualification | Single select | `Small`, `MSME`, `Enterprise` |
+| CreatedBy | Text | Logged-in user's name |
+| Notes | Long text | |
+
+**Contacts Table** (`tbls0ScSnuZUNe9UV`)
+
+| Field | Type | Notes |
+|---|---|---|
+| ContactID | Text | Auto-assigned (format: `CON0001`) |
+| Name | Text | |
+| Email | Email | Work email |
+| Email FNAME | Text | Auto-extracted from email prefix |
+| Personal Email | Email | Optional |
+| Phone Number | Text | |
+| Position | Text | |
+| Tags | Multi-select | `IECA`, `HECA`, `NACAC`, `WACAC`, `School`, `Community`, `Homeschool` |
+| CompanyID | Text | Links contact to a company |
+
+---
+
+### Contacts Database (`appNF0vZQGLNucTck`)
+
+**Team Table** (`tbltkz5mwNDjR3a6w`) — Used for authentication only.
+
+| Field | Type |
+|---|---|
+| Employee ID | Text |
+| Name | Text |
+| Email | Email |
+| Password | Text |
+| Working Status | Single select |
+| Employee Type | Single select |
+| Employee Level | Single select |
+| Phone Number | Text |
+
+---
+
+## API Reference
+
+All routes are prefixed with `/api/`. In development, Vite proxies these to `http://localhost:8000`.
+
+### Authentication
+
+#### `POST /api/login`
+
+Validates credentials against the Team table.
+
+**Request body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "yourpassword"
+}
+```
+
+**Response (success):**
+```json
+{
+  "success": true,
+  "user": {
+    "id": "recXXXXXX",
+    "name": "John Doe",
+    "email": "user@example.com"
+  }
+}
+```
+
+---
+
+### Lead Management
+
+#### `POST /api/add-lead`
+
+Creates a new company record and one or more contact records. Contacts are linked to the company via `CompanyID`.
+
+**Request body:**
+```json
+{
+  "company": {
+    "name": "Acme Corp",
+    "country": "United States",
+    "state": "California",
+    "website": "https://acme.com",
+    "qualification": "Enterprise",
+    "notes": "Found via LinkedIn"
+  },
+  "pocs": [
+    {
+      "name": "Jane Smith",
+      "email": "jane@acme.com",
+      "personalEmail": "jane@gmail.com",
+      "phone": "+1 555 123 4567",
+      "position": "Director of Admissions",
+      "tags": ["NACAC"]
+    }
+  ],
+  "createdBy": "John Doe"
+}
+```
+
+---
+
+#### `GET /api/search-leads?q=<query>`
+
+Searches companies and contacts. Matches against: company name, contact name, email, phone, CompanyID, ContactID.
+
+Returns an array of company objects, each with their associated contacts.
+
+---
+
+#### `GET /api/company/{company_id}`
+
+Returns full details for one company and all its linked contacts.
+
+---
+
+#### `POST /api/update-company/{company_id}`
+
+Updates one or more fields on a company record.
+
+**Request body:** Any subset of company fields as key-value pairs.
+
+---
+
+#### `POST /api/update-contact/{contact_id}`
+
+Updates one or more fields on a contact record.
+
+**Request body:** Any subset of contact fields as key-value pairs.
+
+---
+
+### Utility Tools
+
+#### `POST /api/upload`
+
+**Delete List Generator.** Accepts one or more CSV/XLSX files. Processes them to find emails that appear in 3 or more files with zero total opens.
+
+- **Form field:** `files` (multipart, multiple files)
+- **Returns:** JSON with count of flagged emails + a download link
+
+#### `GET /api/download`
+
+Downloads the generated `delete_list.csv`.
+
+#### `POST /api/duplicate-email-finder`
+
+**Duplicate Finder.** Accepts one or more CSV/XLSX files and a duplicate type.
+
+- **Form field:** `files` (multipart, multiple files)
+- **Form field:** `duplicate_type` — one of `email`, `company`, `fullname`
+- **Returns:** JSON with count of duplicate groups + a download link
+
+#### `POST /api/overlap-checker`
+
+**Overlap Checker.** Accepts exactly two files. Returns a cleaned version of file 1 with emails that exist in file 2 removed.
+
+- **Form field:** `file1` — your main list
+- **Form field:** `file2` — the list to check against
+- **Returns:** JSON with removed count + cleaned file download
+
+#### `POST /api/clear-uploads`
+
+Clears the server-side `uploads/` folder.
+
+---
+
+## Utility Tools
 
 ### Delete List Generator
-1. Upload one or more CSV files (must have `Email` and `Opens` columns)
-2. Processing happens automatically
-3. Download your results: `delete_list.csv` (emails flagged for deletion)
 
-### Duplicate Email Finder
-1. Upload one or more CSV files (must have `email` column; `first_name`, `last_name`, `company` optional)
-2. Processing happens automatically
-3. Download your results:
-   - `duplicate_emails.csv` (all duplicate emails, grouped by email)
-   - `common_company.csv` (all duplicate companies, grouped by company)
-   - `common_fullname.csv` (all duplicate full names, grouped by full name)
+**Purpose:** Given one or more email dump files, identify emails that should be removed from your mailing list because they are disengaged.
 
-### Gmail Lead Analyzer
-- Direct link to analyze Gmail leads: [Gmail Lead Analyzer](https://riseglobaleducation.com/)
+**Logic:** An email is flagged for deletion if it appears in **3 or more separate files** with a **total opens count of 0** across all files.
 
----
+**How to use:**
+1. Navigate to Tool Suite > Delete List Generator
+2. Upload one or more CSV/XLSX files — each file must have:
+   - `Email` column
+   - `Opens` column (numeric)
+3. Click Process
+4. Download `delete_list.csv`
 
-## What Changed from Previous Version
-
-**Removed:**
-- Master database (`master_db.csv`) - no longer maintained
-- All master DB download/delete endpoints
-- Status tracking beyond the current session
-- Soft delete status management in a persistent database
-
-**Why?** 
-- You don't yet know the structure of your actual master database
-- You'll write a separate program to handle deletions in the real master DB
-- This tool should focus on one task: identifying emails to delete
+**Output:** `delete_list.csv` — a single-column file with all flagged email addresses.
 
 ---
 
-## How dump_count Works
+### Duplicate Finder
 
-- Each CSV file counts as one dump for any email it contains (duplicates inside a single file count as one presence).
-- `dump_count` tracks how many different files an email appeared in.
-- Emails with `dump_count >= 3` AND `total_open == 0` are flagged for deletion.
+**Purpose:** Find duplicate entries across one or more contact files. Useful for deduplicating before sending campaigns or importing into a CRM.
 
----
+**Grouping modes:**
+- **By Email** — Groups records that share the same email address
+- **By Company** — Groups records from the same company
+- **By Full Name** — Groups records with the same full name
 
-## Input Format
+**How to use:**
+1. Navigate to Tool Suite > Duplicate Finder
+2. Upload one or more CSV/XLSX files — each file must have at least an `email` column. `first_name`, `last_name`, and `company` are optional but improve grouping accuracy.
+3. Select a grouping mode
+4. Click Find Duplicates
+5. Download the results
 
-
-### File Upload Requirements
-
-- Only `.csv` and `.xlsx` files are accepted for upload.
-- For Delete List Generator: CSV/XLSX must contain these columns:
-   - `Email` - email address
-   - `Opens` - number of opens (numeric)
-- For Duplicate Email Finder: CSV/XLSX must contain at least `email` column. `first_name`, `last_name`, and `company` are optional.
-
-Column names are case-insensitive and whitespace is trimmed.
-
----
-
-
-## Output
-
-**delete_list.csv** (Delete List Generator)
-- Single column: `email`
-- Contains all emails that appeared in 3+ dumps with 0 opens
-- Ready to be used by your separate deletion program
-
-
-**Duplicate Email Finder Outputs:**
-- **duplicate_emails.csv** (grouped by email): Columns: `Full Name`, `Company Name`, `Count`, `Emails`
-- **common_company.csv** (grouped by company): Columns: `Company Name`, `Full Name(s)`, `Count`, `Emails`
-- **common_fullname.csv** (grouped by full name): Columns: `Full Name`, `Company Name(s)`, `Count`, `Emails`
-
-Each file contains all groups with more than one occurrence. The grouping type is selected in the Duplicate Email Finder UI.
-## Hardcore Test Example
-
-To stress test the app, use the provided `test_duplicates_hardcore.csv` (contains 1000+ rows, complex duplicates, and edge cases). Upload it in the Duplicate Email Finder to verify performance and correctness with large datasets.
----
-
-## Branding
-
-The UI and documentation now use the full company name: **RISE Research**. The dashboard includes the official logo and adheres to the brand guidelines.
+**Output files:**
+| File | Grouped by | Columns |
+|---|---|---|
+| `duplicate_emails.csv` | Email | Full Name, Company Name, Count, Emails |
+| `common_company.csv` | Company | Company Name, Full Name(s), Count, Emails |
+| `common_fullname.csv` | Full Name | Full Name, Company Name(s), Count, Emails |
 
 ---
 
-## Quick Test Example
+### Overlap Checker
 
-1. Create three CSV files, each containing:
-```
-email,opens
-test@example.com,0
-```
+**Purpose:** Remove contacts from your main list that already exist in another list. Prevents sending duplicate outreach.
 
-2. Upload all three files at once (or upload them separately across multiple uploads).
+**How to use:**
+1. Navigate to Tool Suite > Overlap Checker
+2. Upload **File 1** — your main outreach list
+3. Upload **File 2** — the list to check against (e.g. previously contacted)
+4. Click Check Overlap
+5. Download the cleaned version of File 1 (with matching emails removed)
 
-3. After processing:
-   - The app will show: "Processing complete! 1 emails flagged for deletion"
-   - `delete_list.csv` will contain `test@example.com`
+**Input requirements:**
+- Both files must be CSV or XLSX
+- Both files must have an `email` column
+- Matching is case-insensitive
 
 ---
 
+## Input & File Format Requirements
 
-## File Storage
+All upload tools accept `.csv` and `.xlsx` files. Column names are **case-insensitive** and surrounding whitespace is trimmed automatically.
 
-- **Uploaded files:** `uploads/`
-- **Delete list:** `delete_list.csv`
-- **Duplicate emails report:** `duplicate_emails.csv`
+| Tool | Required Columns | Optional Columns |
+|---|---|---|
+| Delete List Generator | `email`, `opens` | — |
+| Duplicate Finder | `email` | `first_name`, `last_name`, `company` |
+| Overlap Checker | `email` | — |
 
-To reset manually:
-```powershell
-del delete_list.csv
-rd /s /q uploads
-mkdir uploads
+---
+
+## Deployment
+
+The app is deployed on **Vercel**.
+
+### How it works
+
+- The React frontend is built with `vite build` and served as a static site
+- The FastAPI backend runs as a **Vercel Serverless Function** via `api/index.py`
+- `vercel.json` configures build output, SPA routing rewrites, and API routing
+
+### Deploy
+
+```bash
+vercel --prod
 ```
 
-Or use the reset endpoint:
-```powershell
-curl -X POST http://localhost:8000/reset
+Or push to the `main` branch if connected to Vercel via GitHub.
+
+### `vercel.json` summary
+
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.py" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
 ```
 
 ---
-
-
-## API Endpoints
-
-- `GET /` - Homepage
-- `GET /app` - Main application interface (Delete List Generator)
-- `POST /upload` - Upload and process CSV files for delete list
-- `GET /download` - Download delete_list.csv
-- `GET /status` - Get current status (delete list preview, uploaded files)
-- `POST /reset` - Clear all uploaded files and delete list
-- `POST /delete/delete_list` - Delete the delete_list.csv file
-- `POST /duplicate-email-finder` - Upload and process CSV files for duplicate email finder
-- `GET /download-duplicates` - Download duplicate_emails.csv
-
----
-
-
 
 ## Troubleshooting
 
-- **Uploads fail:** Ensure `python-multipart` is installed (`pip install -r requirements.txt`).
-- **Invalid file type:** Only `.csv` and `.xlsx` files are accepted for upload.
-- **Changes not appearing:** Restart the server with `uvicorn app:app --reload`.
-- **Check errors:** Look at the terminal running `uvicorn` for detailed error messages.
-- **File not found:** Make sure all HTML files (app.html, dashboard.html, duplicate.html) are in the `static/` folder.
+**App won't start / Python errors on `npm run dev`**
 
----
+Make sure you have created and activated the `.venv` virtual environment and installed requirements:
+```bash
+python -m venv .venv
+.venv\Scripts\activate   # Windows
+pip install -r requirements.txt
+```
 
-## Next Steps
+**`ModuleNotFoundError` for `python-multipart`**
 
-Use the generated `delete_list.csv` in your separate master database deletion program. The delete list contains only the email addresses that need to be removed based on your criteria (3+ dumps, 0 opens).
+Run `pip install -r requirements.txt` inside the activated virtual environment.
+
+**Airtable calls returning 401 or 403**
+
+Check that `AIRTABLE_WRITE_TOKEN` and `AIRTABLE_READ_TOKEN` in your `.env` are valid and have the correct scopes. Tokens must have `data.records:read` and `data.records:write` on the relevant bases.
+
+**Login fails even with correct credentials**
+
+The Team table is in a separate Airtable base (`CONTACTS_DATABASE_BASE_ID`). Make sure your read token has access to that base, not just the Lead Collection base.
+
+**File upload fails**
+
+- Confirm the file is `.csv` or `.xlsx` — no other formats are accepted
+- Check that the required column names are present (case-insensitive)
+- Check the terminal running uvicorn for detailed error output
+
+**Changes in Airtable not showing up**
+
+The app reads from Airtable on each request. There is no local cache. If data looks stale, hard refresh the browser page.
+
+**TypeScript errors**
+
+Run `npm run typecheck` to see all type errors. Fix before building for production.
+
+**Vercel deployment failing**
+
+Check that all environment variables (`AIRTABLE_WRITE_TOKEN`, `AIRTABLE_READ_TOKEN`, `LEAD_COLLECTION_BASE_ID`, `CONTACTS_DATABASE_BASE_ID`) are set in the Vercel project settings under Environment Variables.
