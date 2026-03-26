@@ -501,13 +501,24 @@ export default function SearchDashboard() {
                 ).map(([companyId, group]) => (
                   <div key={companyId} style={{ marginBottom: '2rem' }}>
                     {group.company ? (
-                      <div className="card" style={{ marginBottom: '1rem', background: 'var(--primary-bg)', borderLeft: '4px solid var(--primary)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--primary)' }}>
-                            {group.company['Company Name']}
-                          </h3>
-                          <span style={{ padding: '4px 12px', background: 'var(--primary)', color: 'var(--text-on-primary)', borderRadius: '12px', fontSize: '13px', fontWeight: 700 }}>
-                            {group.company.CompanyID}
+                      <div className="card" style={{ marginBottom: '1rem', padding: 0, overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', gap: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {group.company['Company Name']}
+                            </h3>
+                            <span style={{ flexShrink: 0, padding: '3px 10px', background: 'var(--green-50)', color: 'var(--green-700)', borderRadius: '12px', fontSize: '12px', fontWeight: 700, border: '1px solid var(--green-200)' }}>
+                              {group.company.CompanyID}
+                            </span>
+                          </div>
+                          <span
+                            onClick={() => navigate(`/company/${group.company!.CompanyID}`)}
+                            title="View company page"
+                            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', background: 'var(--primary-bg)', border: '1px solid var(--primary-light)', borderRadius: '6px', cursor: 'pointer', color: 'var(--primary)' }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
+                              <polyline points="9 18 15 12 9 6" />
+                            </svg>
                           </span>
                         </div>
                       </div>
