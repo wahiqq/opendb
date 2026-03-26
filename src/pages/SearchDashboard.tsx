@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import AddLeadModal from '../components/AddLeadModal'
+import { CountrySelect } from '../components/CountryStateFields'
 import { IconSearch, IconDatabase } from '../components/Icons'
 
 interface Company {
@@ -113,15 +114,15 @@ export default function SearchDashboard() {
 
   // Apply client-side filters to results
   function applyFilters(results: SearchResults): SearchResults {
-    const countryFilter = filterCountry.trim().toLowerCase()
+    const countryFilter = filterCountry.trim()
     const tagsActive = filterTags.size > 0
 
     let companies = results.companies
     let contacts = results.contacts
 
     if (countryFilter) {
-      companies = companies.filter(c => c.Country.toLowerCase().includes(countryFilter))
-      contacts = contacts.filter(c => c.Company?.Country.toLowerCase().includes(countryFilter))
+      companies = companies.filter(c => c.Country === countryFilter)
+      contacts = contacts.filter(c => c.Company?.Country === countryFilter)
     }
 
     if (tagsActive) {
@@ -145,7 +146,25 @@ export default function SearchDashboard() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
 
-      <div className="dash-hero">
+      <div className="dash-hero" style={{ position: 'relative' }}>
+        <button
+          onClick={() => setShowAddLeadModal(true)}
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '24px',
+            padding: '10px 20px',
+            background: 'var(--primary)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '8px',
+            fontWeight: 700,
+            fontSize: '15px',
+            cursor: 'pointer',
+          }}
+        >
+          + Add Lead
+        </button>
         <div className="dash-hero-badge">
           RISE Research · Lead Collection
         </div>
@@ -277,6 +296,8 @@ export default function SearchDashboard() {
                 top,
                 right,
                 width: '340px',
+                maxHeight: `calc(100vh - ${top + 16}px)`,
+                overflowY: 'auto',
                 background: 'var(--surface)',
                 border: '1px solid var(--border)',
                 borderRadius: '14px',
@@ -300,25 +321,10 @@ export default function SearchDashboard() {
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
                   Country
                 </label>
-                <input
-                  type="text"
+                <CountrySelect
                   value={filterCountry}
-                  onChange={e => setFilterCountry(e.target.value)}
-                  placeholder="e.g. USA, India…"
-                  style={{
-                    width: '100%',
-                    padding: '9px 12px',
-                    fontSize: '14px',
-                    border: '1.5px solid var(--border)',
-                    borderRadius: '8px',
-                    outline: 'none',
-                    background: 'var(--surface)',
-                    color: 'var(--text)',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit',
-                  }}
-                  onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                  onChange={setFilterCountry}
+                  small
                 />
               </div>
 
@@ -550,11 +556,7 @@ export default function SearchDashboard() {
           </div>
         )}
 
-        <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-          <button onClick={() => setShowAddLeadModal(true)} className="btn btn-outline-green">
-            + Add Lead
-          </button>
-        </div>
+
       </div>
 
       <footer className="site-footer">© 2026 RISE Research — Internal Use Only</footer>

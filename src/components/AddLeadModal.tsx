@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { IconX, IconCheck } from './Icons'
+import { CountrySelect, StateField } from './CountryStateFields'
 
 interface POC {
   id: string
@@ -228,24 +229,13 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
               }}>
                 Country <span style={{ color: 'var(--error)' }}>*</span>
               </label>
-              <input
-                type="text"
+              <CountrySelect
                 value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                required
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  fontSize: '15px',
-                  border: '2px solid var(--gray-300)',
-                  borderRadius: '10px',
-                  outline: 'none',
-                  background: 'var(--surface)',
-                  color: 'var(--text)',
-                  fontFamily: 'inherit',
+                onChange={(val) => {
+                  setCountry(val)
+                  setState('') // reset state when country changes
                 }}
-                onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
+                required
               />
             </div>
 
@@ -257,25 +247,12 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                 color: 'var(--text)',
                 marginBottom: '8px',
               }}>
-                State (Optional)
+                State {country === 'United States' ? <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span> : <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span>}
               </label>
-              <input
-                type="text"
+              <StateField
+                country={country}
                 value={state}
-                onChange={(e) => setState(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  fontSize: '15px',
-                  border: '2px solid var(--gray-300)',
-                  borderRadius: '10px',
-                  outline: 'none',
-                  background: 'var(--surface)',
-                  color: 'var(--text)',
-                  fontFamily: 'inherit',
-                }}
-                onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                onBlur={(e) => e.target.style.borderColor = 'var(--gray-300)'}
+                onChange={setState}
               />
             </div>
           </div>

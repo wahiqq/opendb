@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import { CountrySelect, StateField } from '../components/CountryStateFields'
 
 interface Company {
   id: string
@@ -134,29 +135,19 @@ function EditableField({ label, value, onSave, multiline }: EditableFieldProps) 
   )
 }
 
-// ─── Qualification Multi-Select ───────────────────────────────────────────────
+// ─── Qualification Single-Select ──────────────────────────────────────────────
 
 function QualificationField({ value, onSave }: { value: string; onSave: (val: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false)
-  // value may be comma-separated if multiple (or single)
-  const toSet = (v: string) => new Set(v.split(',').map(s => s.trim()).filter(Boolean))
-  const [selected, setSelected] = useState<Set<string>>(toSet(value))
+  const [draft, setDraft] = useState(value)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  function toggle(opt: string) {
-    setSelected(prev => {
-      const next = new Set(prev)
-      next.has(opt) ? next.delete(opt) : next.add(opt)
-      return next
-    })
-  }
 
   async function handleSave() {
     setSaving(true)
     setError('')
     try {
-      await onSave(Array.from(selected).join(', '))
+      await onSave(draft)
       setEditing(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
@@ -166,12 +157,10 @@ function QualificationField({ value, onSave }: { value: string; onSave: (val: st
   }
 
   function handleCancel() {
-    setSelected(toSet(value))
+    setDraft(value)
     setEditing(false)
     setError('')
   }
-
-  const displayValue = value || '—'
 
   return (
     <div>
@@ -185,15 +174,15 @@ function QualificationField({ value, onSave }: { value: string; onSave: (val: st
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => toggle(opt.value)}
+                onClick={() => setDraft(opt.value)}
                 style={{
                   padding: '5px 12px',
                   fontSize: '13px',
                   fontWeight: 600,
                   borderRadius: '8px',
-                  border: selected.has(opt.value) ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
-                  background: selected.has(opt.value) ? 'var(--primary-bg)' : 'var(--surface)',
-                  color: selected.has(opt.value) ? 'var(--primary)' : 'var(--text-muted)',
+                  border: draft === opt.value ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
+                  background: draft === opt.value ? 'var(--primary-bg)' : 'var(--surface)',
+                  color: draft === opt.value ? 'var(--primary)' : 'var(--text-muted)',
                   cursor: 'pointer',
                 }}
               >
@@ -213,19 +202,132 @@ function QualificationField({ value, onSave }: { value: string; onSave: (val: st
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-          <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          <div style={{ flex: 1 }}>
             {value
-              ? toSet(value).size > 0
-                ? Array.from(toSet(value)).map(v => (
-                  <span key={v} style={{ padding: '3px 10px', fontSize: '13px', fontWeight: 600, background: 'var(--primary-bg)', color: 'var(--primary)', borderRadius: '8px', border: '1px solid var(--primary-light)' }}>
-                    {v}
-                  </span>
-                ))
-                : <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>—</p>
+              ? <span style={{ padding: '3px 10px', fontSize: '13px', fontWeight: 600, background: 'var(--primary-bg)', color: 'var(--primary)', borderRadius: '8px', border: '1px solid var(--primary-light)' }}>{value}</span>
               : <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>—</p>
             }
           </div>
-          <button onClick={() => { setSelected(toSet(value)); setEditing(true) }} style={{ flexShrink: 0, padding: '2px 10px', fontSize: '12px', fontWeight: 600, background: 'none', color: 'var(--primary)', border: '1px solid var(--primary-light)', borderRadius: '5px', cursor: 'pointer' }}>
+          <button onClick={() => { setDraft(value); setEditing(true) }} style={{ flexShrink: 0, padding: '2px 10px', fontSize: '12px', fontWeight: 600, background: 'none', color: 'var(--primary)', border: '1px solid var(--primary-light)', borderRadius: '5px', cursor: 'pointer' }}>
+            Edit
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Country Editable Field ───────────────────────────────────────────────────
+
+function CountryEditableField({ value, onSave, onCountryChange }: { value: string; onSave: (val: string) => Promise<void>; onCountryChange?: (val: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSave() {
+    if (!draft) { setError('Please select a country'); return }
+    setSaving(true)
+    setError('')
+    try {
+      await onSave(draft)
+      setEditing(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleCancel() {
+    setDraft(value)
+    setEditing(false)
+    setError('')
+  }
+
+  return (
+    <div>
+      <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+        Country
+      </span>
+      {editing ? (
+        <div>
+          <CountrySelect value={draft} onChange={val => { setDraft(val); onCountryChange?.(val) }} small />
+          {error && <p style={{ fontSize: '12px', color: 'var(--error-text)', marginTop: '4px' }}>{error}</p>}
+          <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 600, background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '6px', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button onClick={handleCancel} style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 600, background: 'none', color: 'var(--text-muted)', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+          <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: value ? 'var(--text)' : 'var(--text-muted)', flex: 1 }}>
+            {value || '—'}
+          </p>
+          <button onClick={() => { setDraft(value); setEditing(true) }} style={{ flexShrink: 0, padding: '2px 10px', fontSize: '12px', fontWeight: 600, background: 'none', color: 'var(--primary)', border: '1px solid var(--primary-light)', borderRadius: '5px', cursor: 'pointer' }}>
+            Edit
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── State Editable Field ─────────────────────────────────────────────────────
+
+function StateEditableField({ value, country, onSave }: { value: string; country: string; onSave: (val: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSave() {
+    setSaving(true)
+    setError('')
+    try {
+      await onSave(draft)
+      setEditing(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleCancel() {
+    setDraft(value)
+    setEditing(false)
+    setError('')
+  }
+
+  return (
+    <div>
+      <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+        State
+      </span>
+      {editing ? (
+        <div>
+          <StateField country={country} value={draft} onChange={setDraft} small />
+          {error && <p style={{ fontSize: '12px', color: 'var(--error-text)', marginTop: '4px' }}>{error}</p>}
+          <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 600, background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '6px', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button onClick={handleCancel} style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 600, background: 'none', color: 'var(--text-muted)', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+          <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: value ? 'var(--text)' : 'var(--text-muted)', flex: 1 }}>
+            {value || '—'}
+          </p>
+          <button onClick={() => { setDraft(value); setEditing(true) }} style={{ flexShrink: 0, padding: '2px 10px', fontSize: '12px', fontWeight: 600, background: 'none', color: 'var(--primary)', border: '1px solid var(--primary-light)', borderRadius: '5px', cursor: 'pointer' }}>
             Edit
           </button>
         </div>
@@ -612,6 +714,7 @@ export default function CompanyPage() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [currentCountry, setCurrentCountry] = useState('')
 
   useEffect(() => {
     const userStr = localStorage.getItem('riseUser')
@@ -627,6 +730,7 @@ export default function CompanyPage() {
         if (data.error) { setError(data.error); return }
         setCompany(data.company)
         setContacts(data.contacts)
+        setCurrentCountry(data.company.Country || '')
       })
       .catch(() => setError('Failed to load company'))
       .finally(() => setLoading(false))
@@ -643,6 +747,7 @@ export default function CompanyPage() {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Failed to save')
     setCompany(prev => prev ? { ...prev, [field]: value } : prev)
+    if (field === 'Country') setCurrentCountry(value)
   }
 
   async function saveContactField(contactRecordId: string, field: keyof Contact, value: string) {
@@ -704,8 +809,18 @@ export default function CompanyPage() {
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
             <EditableField label="Company Name" value={company['Company Name']} onSave={val => saveCompanyField('Company Name', val)} />
-            <EditableField label="Country" value={company.Country} onSave={val => saveCompanyField('Country', val)} />
-            <EditableField label="State" value={company.State} onSave={val => saveCompanyField('State', val)} />
+            <CountryEditableField
+              value={company.Country}
+              onSave={val => saveCompanyField('Country', val)}
+              onCountryChange={setCurrentCountry}
+            />
+            <StateEditableField
+              value={company.State}
+              country={currentCountry || company.Country}
+              onSave={async val => {
+                await saveCompanyField('State', val)
+              }}
+            />
             <EditableField label="Website" value={company.Website} onSave={val => saveCompanyField('Website', val)} />
             <ReadOnlyField label="Created By" value={company.CreatedBy} />
             <div style={{ gridColumn: '1 / -1' }}>
