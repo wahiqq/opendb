@@ -827,6 +827,7 @@ async def get_company(company_id: str):
                     "Email FNAME": f.get("Email FNAME", ""),
                     "Personal Email": f.get("Personal Email", ""),
                     "Phone Number": f.get("Phone Number", ""),
+                    "LinkedIn": f.get("LinkedIn", ""),
                     "Position": f.get("Position", ""),
                     "Tags": f.get("Tags", ""),
                 })
