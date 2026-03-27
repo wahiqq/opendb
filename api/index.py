@@ -932,8 +932,6 @@ async def add_contact(request: AddContactRequest):
         return JSONResponse({"error": "Work Email is required (or mark as Not available)"}, status_code=422)
     if not request.PersonalEmail.strip() and request.Email != "NA":
         request = request.model_copy(update={"PersonalEmail": "NA"})
-    if not request.PhoneNumber.strip():
-        return JSONResponse({"error": "Phone Number is required (or mark as Not available)"}, status_code=422)
     if not request.LinkedIn.strip():
         return JSONResponse({"error": "LinkedIn is required (or mark as Not available)"}, status_code=422)
     try:

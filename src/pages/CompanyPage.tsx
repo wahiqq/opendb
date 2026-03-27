@@ -732,7 +732,7 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
             )}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <label style={{ ...labelStyle, marginBottom: 0 }}>Phone Number *</label>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>Phone Number</label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
                   <input type="checkbox" checked={phoneNumberNA} onChange={e => { setPhoneNumberNA(e.target.checked); if (e.target.checked) setDraft(p => ({ ...p, 'Phone Number': '' })) }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
                   <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
@@ -844,9 +844,6 @@ function AddContactForm({ companyRecordId, companyId, companyWebsite, onAdded }:
     if (field === 'Name' && emailFNameLocked) {
       setEmailFName(value.trim().split(/\s+/)[0] || '')
     }
-    if (field === 'Email' && value.trim() && value !== 'NA') {
-      setPersonalEmailNA(true)
-    }
     setForm(p => ({ ...p, [field]: value }))
   }
 
@@ -867,24 +864,19 @@ function AddContactForm({ companyRecordId, companyId, companyWebsite, onAdded }:
         return
       }
     }
-    if (!emailNA && !personalEmailNA && !form['Personal Email'].trim()) {
-      setPersonalEmailNA(true)
-    }
-    if (!phoneNumberNA && !form['Phone Number'].trim()) {
-      setError('Phone Number is required (or mark as Not available)')
-      return
-    }
     if (!linkedinNA && !form.LinkedIn.trim()) {
       setError('LinkedIn is required (or mark as Not available)')
       return
     }
+    // Personal email: NA if work email is provided, or if personalEmailNA is checked
+    const resolvedPersonalEmail = emailNA ? 'NA' : (!personalEmailNA && form['Personal Email'].trim() ? form['Personal Email'] : 'NA')
     setSaving(true)
     setError('')
     try {
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyRecordId, companyId, Name: form.Name, Email: emailNA ? 'NA' : form.Email, EmailFName: emailFName || form.Name.trim().split(/\s+/)[0] || '', PersonalEmail: emailNA ? 'NA' : (personalEmailNA ? 'NA' : form['Personal Email']), PhoneNumber: phoneNumberNA ? 'NA' : form['Phone Number'], LinkedIn: linkedinNA ? 'NA' : form.LinkedIn, Position: form.Position, Tags: form.Tags, createdBy: currentUser.name || '' }),
+        body: JSON.stringify({ companyRecordId, companyId, Name: form.Name, Email: emailNA ? 'NA' : form.Email, EmailFName: emailFName || form.Name.trim().split(/\s+/)[0] || '', PersonalEmail: resolvedPersonalEmail, PhoneNumber: phoneNumberNA ? 'NA' : form['Phone Number'], LinkedIn: linkedinNA ? 'NA' : form.LinkedIn, Position: form.Position, Tags: form.Tags, createdBy: currentUser.name || '' }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to add contact')
@@ -1023,7 +1015,7 @@ function AddContactForm({ companyRecordId, companyId, companyWebsite, onAdded }:
         )}
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <label style={{ ...labelStyle, marginBottom: 0 }}>Phone Number *</label>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Phone Number</label>
             <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
               <input type="checkbox" checked={phoneNumberNA} onChange={e => { setPhoneNumberNA(e.target.checked); if (e.target.checked) update('Phone Number', '') }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
               <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
