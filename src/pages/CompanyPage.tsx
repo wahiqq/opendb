@@ -34,7 +34,7 @@ const QUALIFICATION_OPTIONS = [
   { value: 'Enterprise', label: 'Enterprise (more than 30 people)' },
 ]
 
-const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool']
+const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool', 'No Tag']
 
 function extractDomain(websiteVal: string): string {
   try {
@@ -516,9 +516,7 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
     if (!draft.Tags) { setError('Tags is required'); return }
     if (!emailNA && !draft.Email.trim()) { setError('Work Email is required (or mark as N/A)'); return }
     if (!emailNA && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.Email.trim())) { setError('Work Email is not a valid email address'); return }
-    if (!emailNA && !personalEmailNA && !(draft['Personal Email'] || '').trim()) { setError('Personal Email is required (or mark as N/A)'); return }
-    if (!emailNA && !personalEmailNA && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((draft['Personal Email'] || '').trim())) { setError('Personal Email is not a valid email address'); return }
-    if (!phoneNumberNA && !draft['Phone Number'].trim()) { setError('Phone Number is required (or mark as N/A)'); return }
+    if (!emailNA && !personalEmailNA && (draft['Personal Email'] || '').trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((draft['Personal Email'] || '').trim())) { setError('Personal Email is not a valid email address'); return }
     if (!linkedinNA && !draft.LinkedIn.trim()) { setError('LinkedIn is required (or mark as N/A)'); return }
     if (!emailNA && companyWebsite && companyWebsite !== 'NA') {
       const domain = extractDomain(companyWebsite)
@@ -869,7 +867,7 @@ function AddContactForm({ companyRecordId, companyId, companyWebsite, onAdded }:
       return
     }
     // Personal email: NA if work email is provided, or if personalEmailNA is checked
-    const resolvedPersonalEmail = emailNA ? 'NA' : (!personalEmailNA && form['Personal Email'].trim() ? form['Personal Email'] : 'NA')
+    const resolvedPersonalEmail = !emailNA ? 'NA' : (personalEmailNA ? 'NA' : form['Personal Email'].trim() || 'NA')
     setSaving(true)
     setError('')
     try {

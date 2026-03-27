@@ -48,7 +48,7 @@ interface AddLeadModalProps {
   }
 }
 
-const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool']
+const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool', 'No Tag']
 const COMPANY_SIZE_OPTIONS = [
   { value: 'Small', label: 'Small (1-3 people)' },
   { value: 'MSME', label: 'MSME (less than 20 people)' },
@@ -213,19 +213,12 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
           return prev
         }
       }
-      if (!d.emailNA && !d.personalEmailNA && !d.personalEmail.trim()) {
-        setError('Personal Email is required (or mark as Not available)')
-        return prev
-      }
-      if (!d.emailNA && !d.personalEmailNA && !isValidEmail(d.personalEmail)) {
+      if (!d.emailNA && !d.personalEmailNA && d.personalEmail.trim() && !isValidEmail(d.personalEmail)) {
         setError('Personal Email is not a valid email address')
         return prev
       }
-      if (!d.phoneNumberNA && !d.phoneNumber.trim()) {
-        setError('Phone Number is required (or mark as Not available)')
-        return prev
-      }
-      if (!d.phoneNumberNA && !isValidPhone(d.phoneNumber)) {
+
+      if (!d.phoneNumberNA && d.phoneNumber.trim() && !isValidPhone(d.phoneNumber)) {
         setError('Phone number can only contain digits, spaces, dashes, and a leading +')
         return prev
       }
@@ -239,7 +232,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
         name: d.name.trim(),
         email: d.emailNA ? 'NA' : d.email.trim(),
         emailFName: d.emailFName.trim() || deriveFName(d.name),
-        personalEmail: d.emailNA ? 'NA' : (d.personalEmailNA ? 'NA' : d.personalEmail.trim()),
+        personalEmail: !d.emailNA ? 'NA' : (d.personalEmailNA ? 'NA' : d.personalEmail.trim()),
         phoneNumber: d.phoneNumberNA ? 'NA' : d.phoneNumber.trim(),
         linkedin: d.linkedinNA ? 'NA' : d.linkedin.trim(),
         position: d.position.trim(),
@@ -855,7 +848,7 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
                     {/* Phone */}
                     <div style={{ marginBottom: '10px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                        <label style={{ ...labelStyle, marginBottom: 0 }}>Phone Number <span style={{ color: 'var(--error)' }}>*</span></label>
+                        <label style={{ ...labelStyle, marginBottom: 0 }}>Phone Number</label>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
                           <input
                             type="checkbox"

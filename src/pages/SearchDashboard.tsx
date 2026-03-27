@@ -40,7 +40,7 @@ interface SearchResults {
   contacts: Contact[]
 }
 
-const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool']
+const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool', 'No Tag']
 
 export default function SearchDashboard() {
   const navigate = useNavigate()

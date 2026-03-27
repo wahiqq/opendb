@@ -473,10 +473,6 @@ async def add_lead(request: AddLeadRequest):
             return JSONResponse({"error": f"{prefix}: Tags is required"}, status_code=422)
         if not poc.email.strip():
             return JSONResponse({"error": f"{prefix}: Work Email is required (or mark as Not available)"}, status_code=422)
-        if poc.email != "NA" and not poc.personalEmail.strip():
-            return JSONResponse({"error": f"{prefix}: Personal Email is required (or mark as Not available)"}, status_code=422)
-        if not poc.phoneNumber.strip():
-            return JSONResponse({"error": f"{prefix}: Phone Number is required (or mark as Not available)"}, status_code=422)
         if not poc.linkedin.strip():
             return JSONResponse({"error": f"{prefix}: LinkedIn is required (or mark as Not available)"}, status_code=422)
     try:
@@ -577,7 +573,7 @@ async def add_lead(request: AddLeadRequest):
                         "Name": poc.name,
                         "Email": poc.email,
                         "Email FNAME": poc.emailFName or (poc.name.strip().split()[0] if poc.name.strip() else ""),
-                        "Personal Email": poc.personalEmail if poc.personalEmail else "",
+                        "Personal Email": poc.personalEmail if poc.personalEmail else ("NA" if poc.email != "NA" else ""),
                         "CompanyID": [company_record_id],  # Link to company
                         "Phone Number": poc.phoneNumber if poc.phoneNumber else "",
                         "LinkedIn": poc.linkedin if poc.linkedin else "",
