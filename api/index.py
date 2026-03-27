@@ -579,6 +579,7 @@ async def add_lead(request: AddLeadRequest):
                         "LinkedIn": poc.linkedin if poc.linkedin else "",
                         "Position": poc.position,
                         "Tags": poc.tags,
+                        **({"CreatedBy": request.createdBy} if request.createdBy else {}),
                     }
                 }
 
