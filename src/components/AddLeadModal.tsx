@@ -48,7 +48,7 @@ interface AddLeadModalProps {
   }
 }
 
-const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool', 'No Tag']
+const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool', 'Counselor', 'Test Prep', 'Agent', 'No Tag']
 const COMPANY_SIZE_OPTIONS = [
   { value: 'Small', label: 'Small (1-3 people)' },
   { value: 'MSME', label: 'MSME (less than 20 people)' },

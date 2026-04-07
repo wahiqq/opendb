@@ -34,7 +34,7 @@ const QUALIFICATION_OPTIONS = [
   { value: 'Enterprise', label: 'Enterprise (more than 30 people)' },
 ]
 
-const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool', 'No Tag']
+const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool', 'Counselor', 'Test Prep', 'Agent', 'No Tag']
 
 function extractDomain(websiteVal: string): string {
   try {
