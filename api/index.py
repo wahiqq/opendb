@@ -558,6 +558,7 @@ async def add_lead(request: AddLeadRequest):
             next_contact_id = last_contact_id + 1
 
             created_contacts = []
+            failed_contacts = []
             for idx, poc in enumerate(request.pocs):
                 contact_id = f"CON{next_contact_id + idx:04d}"
 
@@ -585,13 +586,11 @@ async def add_lead(request: AddLeadRequest):
 
                 contact_create_data = contact_create_response.json()
                 if contact_create_response.status_code != 200:
-                    return JSONResponse(
-                        {"error": f"Failed to create contact #{idx + 1} ({poc.name}): {contact_create_data.get('error', {}).get('message', 'Unknown error')}"},
-                        status_code=contact_create_response.status_code
-                    )
-                created_contacts.append(contact_create_data)
+                    failed_contacts.append(f"{poc.name} (#{idx + 1}): {contact_create_data.get('error', {}).get('message', 'Unknown error')}")
+                else:
+                    created_contacts.append(contact_create_data)
 
-            return JSONResponse({
+            response: Dict = {
                 "success": True,
                 "company": {
                     "id": company_record_id,
@@ -606,7 +605,10 @@ async def add_lead(request: AddLeadRequest):
                     }
                     for c in created_contacts
                 ],
-            })
+            }
+            if failed_contacts:
+                response["warning"] = f"Company created but {len(failed_contacts)} contact(s) failed to save: {'; '.join(failed_contacts)}. Please add them manually from the company page."
+            return JSONResponse(response)
 
     except Exception as e:
         return JSONResponse(
@@ -936,27 +938,24 @@ async def add_contact(request: AddContactRequest):
             headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
             contacts_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
 
-            # Determine next ContactID
-            existing_ids = []
-            offset = None
-            while True:
-                params: Dict = {"fields[]": "ContactID"}
-                if offset:
-                    params["offset"] = offset
-                res = await client.get(contacts_url, headers=headers, params=params)
-                data = res.json()
-                for rec in data.get("records", []):
-                    cid = rec.get("fields", {}).get("ContactID", "")
-                    if cid and cid.startswith("CON"):
-                        try:
-                            existing_ids.append(int(cid.replace("CON", "")))
-                        except ValueError:
-                            pass
-                offset = data.get("offset")
-                if not offset:
-                    break
-
-            next_id = max(existing_ids, default=0) + 1
+            # Determine next ContactID — fetch only the last record sorted descending
+            res = await client.get(contacts_url, headers=headers, params={
+                "fields[]": "ContactID",
+                "sort[0][field]": "ContactID",
+                "sort[0][direction]": "desc",
+                "pageSize": 1,
+            })
+            data = res.json()
+            last_id = 0
+            contact_records = data.get("records", [])
+            if contact_records:
+                cid = contact_records[0].get("fields", {}).get("ContactID", "")
+                if cid and cid.startswith("CON"):
+                    try:
+                        last_id = int(cid.replace("CON", ""))
+                    except ValueError:
+                        pass
+            next_id = last_id + 1
             contact_id = f"CON{next_id:04d}"
 
             fname = request.EmailFName or (request.Name.strip().split()[0] if request.Name.strip() else "")

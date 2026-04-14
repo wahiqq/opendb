@@ -354,6 +354,13 @@ export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLea
         throw new Error(data.error || 'Failed to add lead')
       }
 
+      if (data.warning) {
+        setError(data.warning)
+        setLoading(false)
+        onSuccess()
+        return
+      }
+
       onSuccess()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add lead')
