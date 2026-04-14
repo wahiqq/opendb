@@ -480,33 +480,30 @@ async def add_lead(request: AddLeadRequest):
             headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
 
             # Step 1: Generate Company ID
-            # Fetch ALL existing companies (paginate) to determine next ID
+            # Fetch only the last record sorted by CompanyID descending — 1 request instead of paginating all
             companies_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{COMPANY_TABLE_ID}"
-            existing_ids = []
-            offset = None
-            while True:
-                params = {"fields[]": "CompanyID"}
-                if offset:
-                    params["offset"] = offset
-                companies_response = await client.get(companies_url, headers=headers, params=params)
-                companies_data = companies_response.json()
-                if companies_response.status_code != 200:
-                    return JSONResponse(
-                        {"error": f"Failed to fetch companies: {companies_data.get('error', {}).get('message', 'Unknown error')}"},
-                        status_code=companies_response.status_code
-                    )
-                for record in companies_data.get("records", []):
-                    cid = record.get("fields", {}).get("CompanyID", "")
-                    if cid and cid.startswith("COMP"):
-                        try:
-                            existing_ids.append(int(cid.replace("COMP", "")))
-                        except ValueError:
-                            continue
-                offset = companies_data.get("offset")
-                if not offset:
-                    break
-
-            next_id = max(existing_ids, default=0) + 1
+            companies_response = await client.get(companies_url, headers=headers, params={
+                "fields[]": "CompanyID",
+                "sort[0][field]": "CompanyID",
+                "sort[0][direction]": "desc",
+                "pageSize": 1,
+            })
+            companies_data = companies_response.json()
+            if companies_response.status_code != 200:
+                return JSONResponse(
+                    {"error": f"Failed to fetch companies: {companies_data.get('error', {}).get('message', 'Unknown error')}"},
+                    status_code=companies_response.status_code
+                )
+            last_company_id = 0
+            records = companies_data.get("records", [])
+            if records:
+                cid = records[0].get("fields", {}).get("CompanyID", "")
+                if cid and cid.startswith("COMP"):
+                    try:
+                        last_company_id = int(cid.replace("COMP", ""))
+                    except ValueError:
+                        pass
+            next_id = last_company_id + 1
             company_id = f"COMP{next_id:04d}"  # e.g., COMP0001, COMP0002, etc.
 
             # Step 2: Create Company record
@@ -541,27 +538,24 @@ async def add_lead(request: AddLeadRequest):
             # Step 3: Create Contact records for each POC
             contacts_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
 
-            # Generate Contact IDs — paginate through all records
-            existing_contact_ids = []
-            offset = None
-            while True:
-                params = {"fields[]": "ContactID"}
-                if offset:
-                    params["offset"] = offset
-                contacts_fetch_response = await client.get(contacts_url, headers=headers, params=params)
-                contacts_fetch_data = contacts_fetch_response.json()
-                for record in contacts_fetch_data.get("records", []):
-                    cid = record.get("fields", {}).get("ContactID", "")
-                    if cid and cid.startswith("CON"):
-                        try:
-                            existing_contact_ids.append(int(cid.replace("CON", "")))
-                        except ValueError:
-                            continue
-                offset = contacts_fetch_data.get("offset")
-                if not offset:
-                    break
-
-            next_contact_id = max(existing_contact_ids, default=0) + 1
+            # Fetch only the last record sorted by ContactID descending — 1 request instead of paginating all
+            contacts_fetch_response = await client.get(contacts_url, headers=headers, params={
+                "fields[]": "ContactID",
+                "sort[0][field]": "ContactID",
+                "sort[0][direction]": "desc",
+                "pageSize": 1,
+            })
+            contacts_fetch_data = contacts_fetch_response.json()
+            last_contact_id = 0
+            contact_records = contacts_fetch_data.get("records", [])
+            if contact_records:
+                cid = contact_records[0].get("fields", {}).get("ContactID", "")
+                if cid and cid.startswith("CON"):
+                    try:
+                        last_contact_id = int(cid.replace("CON", ""))
+                    except ValueError:
+                        pass
+            next_contact_id = last_contact_id + 1
 
             created_contacts = []
             for idx, poc in enumerate(request.pocs):
@@ -589,8 +583,13 @@ async def add_lead(request: AddLeadRequest):
                     json=contact_payload
                 )
 
-                if contact_create_response.status_code == 200:
-                    created_contacts.append(contact_create_response.json())
+                contact_create_data = contact_create_response.json()
+                if contact_create_response.status_code != 200:
+                    return JSONResponse(
+                        {"error": f"Failed to create contact #{idx + 1} ({poc.name}): {contact_create_data.get('error', {}).get('message', 'Unknown error')}"},
+                        status_code=contact_create_response.status_code
+                    )
+                created_contacts.append(contact_create_data)
 
             return JSONResponse({
                 "success": True,
