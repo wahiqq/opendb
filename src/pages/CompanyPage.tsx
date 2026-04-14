@@ -26,6 +26,7 @@ interface Contact {
   LinkedIn: string
   Position: string
   Tags: string
+  'Call Notes': string
 }
 
 const QUALIFICATION_OPTIONS = [
@@ -535,7 +536,7 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
         'Phone Number': phoneNumberNA ? 'NA' : draft['Phone Number'],
         LinkedIn: linkedinNA ? 'NA' : draft.LinkedIn,
       }
-      for (const field of ['Name', 'Email', 'Email FNAME', 'Personal Email', 'Phone Number', 'LinkedIn', 'Position', 'Tags'] as (keyof Contact)[]) {
+      for (const field of ['Name', 'Email', 'Email FNAME', 'Personal Email', 'Phone Number', 'LinkedIn', 'Position', 'Tags', 'Call Notes'] as (keyof Contact)[]) {
         if (resolved[field] !== contact[field]) {
           await onSaveField(contact.id, field, resolved[field] as string)
         }
@@ -755,6 +756,10 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
             <div>
               <TagSelectField value={draft.Tags} onChange={v => setDraft(p => ({ ...p, Tags: v }))} />
             </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Call Notes</label>
+              <textarea value={draft['Call Notes'] || ''} onChange={e => setDraft(p => ({ ...p, 'Call Notes': e.target.value }))} placeholder="Add notes from your call…" rows={4} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} onFocus={e => e.target.style.borderColor = 'var(--primary)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+            </div>
           </div>
           {error && <p style={{ fontSize: '12px', color: 'var(--error-text)', marginBottom: '8px' }}>{error}</p>}
           <button onClick={handleSave} disabled={saving} style={{ padding: '6px 16px', fontSize: '13px', fontWeight: 600, background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '6px', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
@@ -806,6 +811,12 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
               : <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>—</p>
             }
           </div>
+          {contact['Call Notes'] && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <span style={labelStyle}>Call Notes</span>
+              <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{contact['Call Notes']}</p>
+            </div>
+          )}
         </div>
       )}
     </div>

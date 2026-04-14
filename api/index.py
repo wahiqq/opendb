@@ -832,6 +832,7 @@ async def get_company(company_id: str):
                     "LinkedIn": f.get("LinkedIn", ""),
                     "Position": f.get("Position", ""),
                     "Tags": f.get("Tags", ""),
+                    "Call Notes": f.get("Call Notes", ""),
                 })
 
             return JSONResponse({"company": company, "contacts": contacts})
@@ -884,7 +885,7 @@ async def update_company(company_id: str, request: UpdateCompanyRequest):
             # Patch each contact
             contacts_base_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
             for contact_record_id, fields in request.contacts.items():
-                contact_fields = {k: fields[k] for k in ("Name", "Email", "Email FNAME", "Personal Email", "Phone Number", "LinkedIn", "Position", "Tags") if k in fields}
+                contact_fields = {k: fields[k] for k in ("Name", "Email", "Email FNAME", "Personal Email", "Phone Number", "LinkedIn", "Position", "Tags", "Call Notes") if k in fields}
                 if not contact_fields:
                     continue
                 await client.patch(
