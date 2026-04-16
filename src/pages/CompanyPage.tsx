@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { CountrySelect, StateField } from '../components/CountryStateFields'
+import { useTagOptions } from '../hooks/useTagOptions'
 
 interface Company {
   id: string
@@ -34,8 +35,6 @@ const QUALIFICATION_OPTIONS = [
   { value: 'MSME', label: 'MSME (less than 20 people)' },
   { value: 'Enterprise', label: 'Enterprise (more than 30 people)' },
 ]
-
-const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool', 'Counselor', 'Test Prep', 'Agent', 'No Tag']
 
 function extractDomain(websiteVal: string): string {
   try {
@@ -469,6 +468,7 @@ function StateEditableField({ value, country, onSave }: { value: string; country
 // ─── Tag Select Field (for contacts) ─────────────────────────────────────────
 
 function TagSelectField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { tags: TAG_OPTIONS } = useTagOptions()
   return (
     <div>
       <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>

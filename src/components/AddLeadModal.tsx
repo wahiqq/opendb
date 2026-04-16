@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react'
 import { IconX, IconCheck } from './Icons'
 import { CountrySelect, StateField } from './CountryStateFields'
+import { useTagOptions } from '../hooks/useTagOptions'
 
 interface POC {
   id: string
@@ -48,7 +49,6 @@ interface AddLeadModalProps {
   }
 }
 
-const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool', 'Counselor', 'Test Prep', 'Agent', 'No Tag']
 const COMPANY_SIZE_OPTIONS = [
   { value: 'Small', label: 'Small (1-3 people)' },
   { value: 'MSME', label: 'MSME (less than 20 people)' },
@@ -152,6 +152,7 @@ function emailMatchesDomain(email: string, domain: string): boolean {
 }
 
 export default function AddLeadModal({ onClose, onSuccess, currentUser }: AddLeadModalProps) {
+  const { tags: TAG_OPTIONS } = useTagOptions()
   const [companyName, setCompanyName] = useState('')
   const [country, setCountry] = useState('')
   const [state, setState] = useState('')

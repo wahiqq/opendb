@@ -127,6 +127,49 @@ def _norm_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
 
 
 # ---------------------------------------------------------------------------
+# Tag Options (live from Airtable schema)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/tag-options")
+async def get_tag_options():
+    """
+    Fetch the current list of options for the Contacts 'Tags' single-select
+    field directly from Airtable's Metadata API, so the UI always reflects
+    what exists in Airtable.
+    """
+    if not AIRTABLE_WRITE_TOKEN:
+        return JSONResponse({"error": "Airtable token not configured"}, status_code=500)
+
+    url = f"https://api.airtable.com/v0/meta/bases/{LEAD_COLLECTION_BASE_ID}/tables"
+    headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=headers)
+            data = resp.json()
+            if resp.status_code != 200:
+                msg = data.get("error", {}).get("message") if isinstance(data, dict) else "Unknown error"
+                return JSONResponse({"error": f"Failed to fetch schema: {msg}"}, status_code=resp.status_code)
+
+        tables = data.get("tables", []) if isinstance(data, dict) else []
+        contacts_table = next((t for t in tables if t.get("id") == CONTACTS_TABLE_ID), None)
+        if not contacts_table:
+            return JSONResponse({"error": "Contacts table not found in schema"}, status_code=404)
+
+        tags_field = next((f for f in contacts_table.get("fields", []) if f.get("name") == "Tags"), None)
+        if not tags_field:
+            return JSONResponse({"error": "Tags field not found on Contacts table"}, status_code=404)
+
+        choices = tags_field.get("options", {}).get("choices", [])
+        # Preserve Airtable's order; strip whitespace from names to clean up
+        # pre-existing entries like " Agent" (leading space in Airtable).
+        names = [c.get("name", "").strip() for c in choices if c.get("name")]
+        return {"tags": names}
+    except httpx.HTTPError as e:
+        return JSONResponse({"error": f"Airtable request failed: {e}"}, status_code=502)
+
+
+# ---------------------------------------------------------------------------
 # Delete List Generator
 # ---------------------------------------------------------------------------
 

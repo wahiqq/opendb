@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar'
 import AddLeadModal from '../components/AddLeadModal'
 import { CountrySelect } from '../components/CountryStateFields'
 import { IconSearch, IconDatabase } from '../components/Icons'
+import { useTagOptions } from '../hooks/useTagOptions'
 
 interface Company {
   id: string
@@ -40,10 +41,9 @@ interface SearchResults {
   contacts: Contact[]
 }
 
-const TAG_OPTIONS = ['IECA', 'HECA', 'NACAC', 'WACAC', 'School', 'Community', 'Homeschool', 'No Tag']
-
 export default function SearchDashboard() {
   const navigate = useNavigate()
+  const { tags: TAG_OPTIONS } = useTagOptions()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResults | null>(null)
   const [loading, setLoading] = useState(false)
