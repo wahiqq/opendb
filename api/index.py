@@ -1,7 +1,9 @@
+import asyncio
 import csv
 import io
 import os
-from typing import List, Optional, Dict
+import time
+from typing import List, Optional, Dict, Tuple
 from fastapi import FastAPI, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -23,6 +25,96 @@ CONTACTS_TABLE_ID = "tbls0ScSnuZUNe9UV"
 
 CONTACTS_DATABASE_BASE_ID = os.getenv("CONTACTS_DATABASE_BASE_ID", "appNF0vZQGLNucTck")
 TEAM_TABLE_ID = "tbltkz5mwNDjR3a6w"
+
+
+# ---------------------------------------------------------------------------
+# Lead Collection cache (for /api/search-leads)
+# ---------------------------------------------------------------------------
+# Full-table scans on every search were taking ~11s. We cache the entire
+# Companies and Contacts tables in memory for SEARCH_CACHE_TTL seconds, which
+# brings most searches down to ~50ms (pure in-process filtering). Any write
+# endpoint calls `invalidate_search_cache()` so user-made changes are reflected
+# instantly.
+
+SEARCH_CACHE_TTL = 60  # seconds
+
+# Only ask Airtable for fields the search endpoint actually returns, which
+# significantly shrinks the payload (big gain when there are many columns).
+COMPANY_FIELDS = ["CompanyID", "Company Name", "Country", "State", "CreatedBy", "Notes"]
+CONTACT_FIELDS = ["ContactID", "Name", "Email", "Phone Number", "Position", "Tags", "CompanyID"]
+
+_cache: Dict[str, Tuple[float, list]] = {}   # key -> (expires_at, records)
+_cache_lock = asyncio.Lock()
+
+
+async def _fetch_all_records(client: httpx.AsyncClient, url: str, fields: List[str]) -> list:
+    """Fetch every record from an Airtable table, paginating until no offset remains."""
+    headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
+    all_records: list = []
+    offset: Optional[str] = None
+    base_params: List[Tuple[str, str]] = [("fields[]", f) for f in fields]
+    base_params.append(("pageSize", "100"))
+    while True:
+        params = list(base_params)
+        if offset:
+            params.append(("offset", offset))
+        resp = await client.get(url, headers=headers, params=params)
+        data = resp.json()
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Airtable fetch failed ({resp.status_code}): "
+                f"{data.get('error', {}).get('message', 'Unknown error')}"
+            )
+        all_records.extend(data.get("records", []))
+        offset = data.get("offset")
+        if not offset:
+            return all_records
+
+
+async def _get_lead_tables() -> Tuple[list, list]:
+    """
+    Return (companies, contacts) — served from the in-memory cache when fresh,
+    otherwise fetched from Airtable in parallel. Concurrent callers share a
+    single refresh via the asyncio lock.
+    """
+    now = time.time()
+    companies_entry = _cache.get("companies")
+    contacts_entry = _cache.get("contacts")
+    if (
+        companies_entry and contacts_entry
+        and companies_entry[0] > now and contacts_entry[0] > now
+    ):
+        return companies_entry[1], contacts_entry[1]
+
+    async with _cache_lock:
+        # Re-check inside the lock in case another task refreshed while we waited.
+        now = time.time()
+        companies_entry = _cache.get("companies")
+        contacts_entry = _cache.get("contacts")
+        if (
+            companies_entry and contacts_entry
+            and companies_entry[0] > now and contacts_entry[0] > now
+        ):
+            return companies_entry[1], contacts_entry[1]
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            companies_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{COMPANY_TABLE_ID}"
+            contacts_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
+            companies, contacts = await asyncio.gather(
+                _fetch_all_records(client, companies_url, COMPANY_FIELDS),
+                _fetch_all_records(client, contacts_url, CONTACT_FIELDS),
+            )
+
+        expiry = time.time() + SEARCH_CACHE_TTL
+        _cache["companies"] = (expiry, companies)
+        _cache["contacts"] = (expiry, contacts)
+        return companies, contacts
+
+
+def invalidate_search_cache() -> None:
+    """Clear the lead-collection cache so the next search re-fetches."""
+    _cache.pop("companies", None)
+    _cache.pop("contacts", None)
 
 
 def _check_columns(filename: str, headers: List[str], required: List[str]) -> Optional[str]:
@@ -651,6 +743,7 @@ async def add_lead(request: AddLeadRequest):
             }
             if failed_contacts:
                 response["warning"] = f"Company created but {len(failed_contacts)} contact(s) failed to save: {'; '.join(failed_contacts)}. Please add them manually from the company page."
+            invalidate_search_cache()
             return JSONResponse(response)
 
     except Exception as e:
@@ -668,141 +761,94 @@ async def add_lead(request: AddLeadRequest):
 async def search_leads(q: str = Query(default="")):
     """
     Search companies and contacts in the Lead Collection Airtable base.
-    Searches by company name, email, contact ID, and company ID.
+    Reads from an in-memory cache (~60s TTL) so repeated searches are fast.
+    Writes to the lead collection invalidate this cache.
     """
     query = q.strip().lower()
 
+    # Require at least 2 characters; single-char queries match nearly everything
+    # and return megabytes of data for no user benefit.
+    if len(query) < 2:
+        return JSONResponse({"companies": [], "contacts": []})
+
     try:
-        async with httpx.AsyncClient() as client:
-            headers = {"Authorization": f"Bearer {AIRTABLE_WRITE_TOKEN}"}
+        all_company_records, all_contact_records = await _get_lead_tables()
+    except RuntimeError as e:
+        return JSONResponse({"error": str(e)}, status_code=502)
+    except Exception as e:
+        return JSONResponse({"error": f"Search failed: {str(e)}"}, status_code=500)
 
-            # Fetch all companies (paginate)
-            companies_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{COMPANY_TABLE_ID}"
-            all_company_records = []
-            offset = None
-            while True:
-                params = {}
-                if offset:
-                    params["offset"] = offset
-                companies_response = await client.get(companies_url, headers=headers, params=params)
-                companies_data = companies_response.json()
-                if companies_response.status_code != 200:
-                    return JSONResponse(
-                        {"error": f"Failed to fetch companies: {companies_data.get('error', {}).get('message', 'Unknown error')}"},
-                        status_code=companies_response.status_code
-                    )
-                all_company_records.extend(companies_data.get("records", []))
-                offset = companies_data.get("offset")
-                if not offset:
-                    break
+    # Build company lookup once; reuse for both filtering and contact enrichment.
+    company_lookup: Dict[str, dict] = {}
+    for record in all_company_records:
+        fields = record.get("fields", {})
+        company_lookup[record["id"]] = {
+            "id": record["id"],
+            "CompanyID": fields.get("CompanyID", ""),
+            "Company Name": fields.get("Company Name", ""),
+            "Country": fields.get("Country", ""),
+            "State": fields.get("State", ""),
+            "CreatedBy": fields.get("CreatedBy", ""),
+            "Notes": fields.get("Notes", ""),
+        }
 
-            # Fetch all contacts (paginate)
-            contacts_url = f"https://api.airtable.com/v0/{LEAD_COLLECTION_BASE_ID}/{CONTACTS_TABLE_ID}"
-            all_contact_records = []
-            offset = None
-            while True:
-                params = {}
-                if offset:
-                    params["offset"] = offset
-                contacts_response = await client.get(contacts_url, headers=headers, params=params)
-                contacts_data = contacts_response.json()
-                if contacts_response.status_code != 200:
-                    return JSONResponse(
-                        {"error": f"Failed to fetch contacts: {contacts_data.get('error', {}).get('message', 'Unknown error')}"},
-                        status_code=contacts_response.status_code
-                    )
-                all_contact_records.extend(contacts_data.get("records", []))
-                offset = contacts_data.get("offset")
-                if not offset:
-                    break
+    # Filter companies
+    filtered_companies = []
+    for record in all_company_records:
+        fields = record.get("fields", {})
+        company_name = str(fields.get("Company Name", "")).lower()
+        company_id = str(fields.get("CompanyID", "")).lower()
+        country = str(fields.get("Country", "")).lower()
+        state = str(fields.get("State", "")).lower()
 
-            # Filter companies
-            filtered_companies = []
-            for record in all_company_records:
-                fields = record.get("fields", {})
-                company_name = str(fields.get("Company Name", "")).lower()
-                company_id = str(fields.get("CompanyID", "")).lower()
-                country = str(fields.get("Country", "")).lower()
-                state = str(fields.get("State", "")).lower()
+        if (query in company_name or
+            query in company_id or
+            query in country or
+            query in state):
+            filtered_companies.append(company_lookup[record["id"]])
 
-                if (query in company_name or
-                    query in company_id or
-                    query in country or
-                    query in state):
-                    filtered_companies.append({
-                        "id": record["id"],
-                        "CompanyID": fields.get("CompanyID", ""),
-                        "Company Name": fields.get("Company Name", ""),
-                        "Country": fields.get("Country", ""),
-                        "State": fields.get("State", ""),
-                        "CreatedBy": fields.get("CreatedBy", ""),
-                        "Notes": fields.get("Notes", ""),
-                    })
+    matched_company_ids = {c["id"] for c in filtered_companies}
 
-            # Create a company lookup map (Airtable record ID -> company details)
-            company_lookup = {}
-            for record in all_company_records:
-                fields = record.get("fields", {})
-                company_lookup[record["id"]] = {
-                    "id": record["id"],
-                    "CompanyID": fields.get("CompanyID", ""),
-                    "Company Name": fields.get("Company Name", ""),
-                    "Country": fields.get("Country", ""),
-                    "State": fields.get("State", ""),
-                    "CreatedBy": fields.get("CreatedBy", ""),
-                    "Notes": fields.get("Notes", ""),
-                }
+    # Filter contacts — either the contact itself matches, or it belongs
+    # to a matched company (so the whole company card stays populated).
+    filtered_contacts = []
+    for record in all_contact_records:
+        fields = record.get("fields", {})
+        name = str(fields.get("Name", "")).lower()
+        email = str(fields.get("Email", "")).lower()
+        contact_id = str(fields.get("ContactID", "")).lower()
+        phone = str(fields.get("Phone Number", "")).lower()
+        position = str(fields.get("Position", "")).lower()
 
-            # IDs of companies that matched the query — include all their contacts
-            matched_company_ids = {c["id"] for c in filtered_companies}
+        company_ids = fields.get("CompanyID", [])
+        linked_company_id = company_ids[0] if company_ids else None
+        belongs_to_matched_company = linked_company_id in matched_company_ids
 
-            # Filter contacts — either query matches the contact itself,
-            # or the contact belongs to a matched company
-            filtered_contacts = []
-            for record in all_contact_records:
-                fields = record.get("fields", {})
-                name = str(fields.get("Name", "")).lower()
-                email = str(fields.get("Email", "")).lower()
-                contact_id = str(fields.get("ContactID", "")).lower()
-                phone = str(fields.get("Phone Number", "")).lower()
-                position = str(fields.get("Position", "")).lower()
+        query_matches = (
+            query in name or
+            query in email or
+            query in contact_id or
+            query in phone or
+            query in position
+        )
 
-                company_ids = fields.get("CompanyID", [])
-                linked_company_id = company_ids[0] if company_ids else None
-                belongs_to_matched_company = linked_company_id in matched_company_ids
-
-                query_matches = (
-                    query in name or
-                    query in email or
-                    query in contact_id or
-                    query in phone or
-                    query in position
-                )
-
-                if query_matches or belongs_to_matched_company:
-                    company_data = company_lookup.get(linked_company_id) if linked_company_id else None
-                    filtered_contacts.append({
-                        "id": record["id"],
-                        "ContactID": fields.get("ContactID", ""),
-                        "Name": fields.get("Name", ""),
-                        "Email": fields.get("Email", ""),
-                        "Phone Number": fields.get("Phone Number", ""),
-                        "Position": fields.get("Position", ""),
-                        "Tags": fields.get("Tags", ""),
-                        "CompanyID": linked_company_id,
-                        "Company": company_data,
-                    })
-
-            return JSONResponse({
-                "companies": filtered_companies,
-                "contacts": filtered_contacts,
+        if query_matches or belongs_to_matched_company:
+            filtered_contacts.append({
+                "id": record["id"],
+                "ContactID": fields.get("ContactID", ""),
+                "Name": fields.get("Name", ""),
+                "Email": fields.get("Email", ""),
+                "Phone Number": fields.get("Phone Number", ""),
+                "Position": fields.get("Position", ""),
+                "Tags": fields.get("Tags", ""),
+                "CompanyID": linked_company_id,
+                "Company": company_lookup.get(linked_company_id) if linked_company_id else None,
             })
 
-    except Exception as e:
-        return JSONResponse(
-            {"error": f"Search failed: {str(e)}"},
-            status_code=500
-        )
+    return JSONResponse({
+        "companies": filtered_companies,
+        "contacts": filtered_contacts,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -937,6 +983,7 @@ async def update_company(company_id: str, request: UpdateCompanyRequest):
                     json={"fields": contact_fields},
                 )
 
+            invalidate_search_cache()
             return JSONResponse({"success": True})
 
     except Exception as e:
@@ -1027,6 +1074,7 @@ async def add_contact(request: AddContactRequest):
                     status_code=create_res.status_code,
                 )
 
+            invalidate_search_cache()
             return JSONResponse({"success": True, "id": create_data["id"], "ContactID": contact_id})
 
     except Exception as e:
@@ -1047,6 +1095,7 @@ async def delete_contact(record_id: str):
                     {"error": data.get("error", {}).get("message", "Failed to delete contact")},
                     status_code=res.status_code,
                 )
+            invalidate_search_cache()
             return JSONResponse({"success": True})
 
     except Exception as e:

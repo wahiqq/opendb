@@ -104,10 +104,11 @@ export default function SearchDashboard() {
     }
   }
 
-  // Debounced search on query change (only when query is non-empty)
+  // Debounced search on query change. Require at least 2 characters to avoid
+  // fetching the entire database for a single-letter query.
   useEffect(() => {
     const trimmed = query.trim()
-    if (!trimmed) { setResults(null); setError(''); return }
+    if (trimmed.length < 2) { setResults(null); setError(''); return }
     const timer = setTimeout(() => doSearch(trimmed), 400)
     return () => clearTimeout(timer)
   }, [query])
