@@ -499,10 +499,10 @@ interface ContactCardProps {
 
 function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: ContactCardProps) {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState({ ...contact })
+  const [draft, setDraft] = useState({ ...contact, Email: contact.Email === 'NA' ? '' : contact.Email, 'Personal Email': contact['Personal Email'] === 'NA' ? '' : contact['Personal Email'] })
   const [emailFNameLocked, setEmailFNameLocked] = useState(true)
-  const [emailNA, setEmailNA] = useState(contact.Email === 'NA')
-  const [personalEmailNA, setPersonalEmailNA] = useState(contact['Personal Email'] === 'NA')
+  const [emailNA, setEmailNA] = useState(false)
+  const [personalEmailNA, setPersonalEmailNA] = useState(false)
   const [phoneNumberNA, setPhoneNumberNA] = useState(contact['Phone Number'] === 'NA')
   const [linkedinNA, setLinkedinNA] = useState(contact.LinkedIn === 'NA')
   const [pendingConfirm, setPendingConfirm] = useState<'email' | 'personalEmail' | null>(null)
@@ -536,10 +536,7 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
         'Phone Number': phoneNumberNA ? 'NA' : draft['Phone Number'],
         LinkedIn: linkedinNA ? 'NA' : draft.LinkedIn,
       }
-      console.log('[handleSave] resolved:', resolved)
-      console.log('[handleSave] contact:', contact)
       for (const field of ['Name', 'Email', 'Email FNAME', 'Personal Email', 'Phone Number', 'LinkedIn', 'Position', 'Tags', 'Call Notes'] as (keyof Contact)[]) {
-        console.log(`[handleSave] field=${field} resolved=${JSON.stringify(resolved[field])} contact=${JSON.stringify(contact[field])} willSave=${resolved[field] !== contact[field]}`)
         if (resolved[field] !== contact[field]) {
           await onSaveField(contact.id, field, resolved[field] as string)
         }
@@ -558,7 +555,7 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
   }
 
   function handleCancel() {
-    setDraft({ ...contact })
+    setDraft({ ...contact, Email: contact.Email === 'NA' ? '' : contact.Email, 'Personal Email': contact['Personal Email'] === 'NA' ? '' : contact['Personal Email'] })
     setEmailNA(contact.Email === 'NA')
     setPersonalEmailNA(contact['Personal Email'] === 'NA')
     setPhoneNumberNA(contact['Phone Number'] === 'NA')
