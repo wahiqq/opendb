@@ -701,7 +701,7 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                 <label style={{ ...labelStyle, marginBottom: 0 }}>Work Email</label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={emailNA} onChange={e => { if (e.target.checked) setPendingConfirm('email'); else { setEmailNA(false); setPersonalEmailNA(false) } }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
+                  <input type="checkbox" checked={emailNA} onChange={e => { if (e.target.checked) setPendingConfirm('email'); else { setEmailNA(false); setPersonalEmailNA(false); setDraft(p => ({ ...p, Email: '' })) } }} style={{ width: '12px', height: '12px', cursor: 'pointer', accentColor: 'var(--primary)' }} />
                   <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>N/A</span>
                 </label>
               </div>
