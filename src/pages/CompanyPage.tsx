@@ -501,7 +501,7 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState({ ...contact, Email: contact.Email === 'NA' ? '' : contact.Email, 'Personal Email': contact['Personal Email'] === 'NA' ? '' : contact['Personal Email'] })
   const [emailFNameLocked, setEmailFNameLocked] = useState(true)
-  const [emailNA, setEmailNA] = useState(false)
+  const [emailNA, setEmailNA] = useState(contact.Email === 'NA')
   const [personalEmailNA, setPersonalEmailNA] = useState(false)
   const [phoneNumberNA, setPhoneNumberNA] = useState(contact['Phone Number'] === 'NA')
   const [linkedinNA, setLinkedinNA] = useState(contact.LinkedIn === 'NA')
@@ -532,7 +532,7 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
       const resolved = {
         ...draft,
         Email: emailNA ? 'NA' : draft.Email,
-        'Personal Email': emailNA ? 'NA' : (personalEmailNA ? 'NA' : (draft['Personal Email'] || '')),
+        'Personal Email': emailNA ? (personalEmailNA ? 'NA' : (draft['Personal Email'] || '')) : 'NA',
         'Phone Number': phoneNumberNA ? 'NA' : draft['Phone Number'],
         LinkedIn: linkedinNA ? 'NA' : draft.LinkedIn,
       }
@@ -557,7 +557,7 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
   function handleCancel() {
     setDraft({ ...contact, Email: contact.Email === 'NA' ? '' : contact.Email, 'Personal Email': contact['Personal Email'] === 'NA' ? '' : contact['Personal Email'] })
     setEmailNA(contact.Email === 'NA')
-    setPersonalEmailNA(contact['Personal Email'] === 'NA')
+    setPersonalEmailNA(false)
     setPhoneNumberNA(contact['Phone Number'] === 'NA')
     setLinkedinNA(contact.LinkedIn === 'NA')
     setPendingConfirm(null)
