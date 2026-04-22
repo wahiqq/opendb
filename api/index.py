@@ -977,11 +977,17 @@ async def update_company(company_id: str, request: UpdateCompanyRequest):
                 contact_fields = {k: fields[k] for k in ("Name", "Email", "Email FNAME", "Personal Email", "Phone Number", "LinkedIn", "Position", "Tags", "Call Notes") if k in fields}
                 if not contact_fields:
                     continue
-                await client.patch(
+                patch_contact_res = await client.patch(
                     f"{contacts_base_url}/{contact_record_id}",
                     headers=headers,
                     json={"fields": contact_fields},
                 )
+                if patch_contact_res.status_code != 200:
+                    patch_contact_data = patch_contact_res.json()
+                    return JSONResponse(
+                        {"error": patch_contact_data.get("error", {}).get("message", "Failed to update contact")},
+                        status_code=patch_contact_res.status_code,
+                    )
 
             invalidate_search_cache()
             return JSONResponse({"success": True})

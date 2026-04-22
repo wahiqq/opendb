@@ -541,6 +541,11 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
           await onSaveField(contact.id, field, resolved[field] as string)
         }
       }
+      setDraft({ ...resolved })
+      setEmailNA(resolved.Email === 'NA')
+      setPersonalEmailNA(resolved['Personal Email'] === 'NA')
+      setPhoneNumberNA(resolved['Phone Number'] === 'NA')
+      setLinkedinNA(resolved.LinkedIn === 'NA')
       setEditing(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
