@@ -536,7 +536,10 @@ function ContactCard({ contact, index, companyWebsite, onSaveField, onDelete }: 
         'Phone Number': phoneNumberNA ? 'NA' : draft['Phone Number'],
         LinkedIn: linkedinNA ? 'NA' : draft.LinkedIn,
       }
+      console.log('[handleSave] resolved:', resolved)
+      console.log('[handleSave] contact:', contact)
       for (const field of ['Name', 'Email', 'Email FNAME', 'Personal Email', 'Phone Number', 'LinkedIn', 'Position', 'Tags', 'Call Notes'] as (keyof Contact)[]) {
+        console.log(`[handleSave] field=${field} resolved=${JSON.stringify(resolved[field])} contact=${JSON.stringify(contact[field])} willSave=${resolved[field] !== contact[field]}`)
         if (resolved[field] !== contact[field]) {
           await onSaveField(contact.id, field, resolved[field] as string)
         }
