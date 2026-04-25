@@ -101,10 +101,10 @@ function isValidEmail(val: string) {
 function isValidName(val: string): string | null {
   const trimmed = val.trim()
   if (!trimmed) return 'Name is required'
-  if (/[^a-zA-Z .'`-]/.test(trimmed)) return 'Name can only contain letters, spaces, and full stops'
+  if (/[^a-zA-ZÀ-ÖØ-öø-ÿ .'`-]/.test(trimmed)) return 'Name can only contain letters, spaces, and full stops'
   const words = trimmed.split(/\s+/)
   for (const word of words) {
-    if (word && !/^[A-Z]/.test(word)) return 'Each word in the name must start with a capital letter (e.g. Wahiq Iqbal)'
+    if (word && !/^[A-ZÀ-ÖØ-Ý]/u.test(word)) return 'Each word in the name must start with a capital letter (e.g. Wahiq Iqbal)'
   }
   return null
 }
