@@ -26,7 +26,7 @@ export const COUNTRIES: string[] = [
   'San Marino', 'Serbia', 'Slovakia', 'Slovenia', 'Spain', 'Sweden', 'Switzerland',
   'Ukraine', 'United Kingdom', 'Vatican City',
   // North & Central America + Caribbean
-  'Antigua and Barbuda', 'Bahamas', 'Barbados', 'Belize', 'Canada', 'Costa Rica',
+  'Antigua and Barbuda', 'Bahamas', 'Barbados', 'Bermuda', 'Belize', 'Canada', 'Costa Rica',
   'Cuba', 'Dominica', 'Dominican Republic', 'El Salvador', 'Grenada', 'Guatemala',
   'Haiti', 'Honduras', 'Jamaica', 'Mexico', 'Nicaragua', 'Panama',
   'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines',
